@@ -109,9 +109,9 @@ class TradingDashboard:
             st.markdown("**Dynamic Capital Allocation Strategy**")
         
         with col2:
-            if st.button("🔄 Refresh Data"):
+            if st.button("🔄 Refresh Data", key="header_refresh_btn"):
                 st.session_state.last_update = datetime.now()
-                st.experimental_rerun()
+                st.rerun()
         
         with col3:
             auto_refresh = st.checkbox("Auto Refresh", value=st.session_state.auto_refresh)
@@ -133,7 +133,7 @@ class TradingDashboard:
             st.session_state.use_real_balance = (balance_mode == "Real Breeze API")
         
         with col2:
-            if st.button("🔄 Refresh Balance"):
+            if st.button("🔄 Refresh Balance", key="balance_refresh_btn"):
                 if st.session_state.dynamic_allocator:
                     success = st.session_state.dynamic_allocator.refresh_real_balance()
                     if success:
@@ -147,7 +147,7 @@ class TradingDashboard:
                 status = st.session_state.real_time_monitor.get_monitoring_status()
                 monitor_active = status['monitoring']['is_active']
             
-            if st.button("📊 Toggle Monitor"):
+            if st.button("📊 Toggle Monitor", key="monitor_toggle_btn"):
                 if st.session_state.real_time_monitor:
                     if monitor_active:
                         st.session_state.real_time_monitor.stop_monitoring()
@@ -297,7 +297,7 @@ class TradingDashboard:
             st.sidebar.metric("Active Trades", len(allocator.active_trades))
             
             # Force refresh button
-            if st.sidebar.button("🔄 Force Refresh"):
+            if st.sidebar.button("🔄 Force Refresh", key="sidebar_force_refresh_btn"):
                 success = allocator.refresh_real_balance()
                 if success:
                     st.sidebar.success("✅ Refreshed!")
@@ -333,14 +333,14 @@ class TradingDashboard:
             "Profit Target %", 1.0, 5.0, manager.profit_target*100, step=0.1
         ) / 100
         
-        if st.sidebar.button("Update Parameters"):
+        if st.sidebar.button("Update Parameters", key="update_params_btn"):
             manager.deployment_pct = new_deployment
             manager.reserve_pct = 1.0 - new_deployment
             manager.per_trade_pct = new_per_trade
             manager.profit_target = new_profit_target
             manager.recalculate_allocations()
             st.sidebar.success("Parameters updated!")
-            st.experimental_rerun()
+            st.rerun()
     
     def render_capital_overview(self):
         """Render capital allocation overview"""
@@ -659,7 +659,7 @@ class TradingDashboard:
                     
                     if position:
                         st.success(f"✅ Opened position in {symbol}")
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error("❌ Failed to open position")
         
@@ -670,19 +670,19 @@ class TradingDashboard:
             
             # Close all positions button
             if manager.open_positions:
-                if st.button("🔴 Close All Positions", type="secondary"):
+                if st.button("🔴 Close All Positions", type="secondary", key="close_all_positions_btn"):
                     for pos in manager.open_positions.copy():
                         # Simulate closing at 3% profit
                         exit_price = pos.entry_price * 1.03
                         manager.close_position(pos.symbol, exit_price, "Manual close")
                     st.success("All positions closed")
-                    st.experimental_rerun()
+                    st.rerun()
             
             # Reset system button
-            if st.button("🔄 Reset System"):
+            if st.button("🔄 Reset System", key="reset_system_btn"):
                 st.session_state.capital_manager = CapitalManager(1000000, 0.70, 0.30, 0.05, 0.03, 0.003)
                 st.success("System reset")
-                st.experimental_rerun()
+                st.rerun()
     
     def render_live_market_data(self):
         """Render comprehensive live market data feed"""
@@ -702,8 +702,8 @@ class TradingDashboard:
             max_etfs = st.slider("Max ETFs to display", 5, 50, 15)
         
         with col3:
-            if st.button("🔄 Refresh Data"):
-                st.experimental_rerun()
+            if st.button("🔄 Refresh Data", key="market_data_refresh_btn"):
+                st.rerun()
         
         # Get ETFs based on selection
         if selected_category == 'All':
@@ -839,7 +839,7 @@ class TradingDashboard:
             # Auto refresh
             if st.session_state.auto_refresh:
                 time.sleep(30)
-                st.experimental_rerun()
+                st.rerun()
         
         except Exception as e:
             st.error(f"Dashboard error: {e}")
