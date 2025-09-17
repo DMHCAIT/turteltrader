@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# API Credentials (IMPORTANT!)
+config.ini
+*.log
+logs/
+
+# Data files
+data/
+*.db
+*.sqlite
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+test_snapshot_*.json
+*_snapshot_*.json
+real_balance_snapshot_*.json
+capital_state_*.json
+
+# Testing files
+setup_deployment.py
+setup_deployment_fixed.py

@@ -1,0 +1,98 @@
+{
+  "simulation_date": "2025-09-17T17:26:46.129795",
+  "parameters": {
+    "initial_capital": 1000000,
+    "deployment_pct": 0.7,
+    "reserve_pct": 0.3,
+    "per_trade_pct": 0.05,
+    "profit_pct": 0.03,
+    "charge_pct": 0.003
+  },
+  "results": {
+    "final_capital": 1003780.893025,
+    "total_profit": 3780.8930249999976,
+    "profit_percentage": 0.3780893024999998,
+    "trades_completed": 4,
+    "open_positions": 3
+  },
+  "closed_trades": [
+    {
+      "id": 1,
+      "etf": "A",
+      "amount": 35000.0,
+      "entry_day": 1,
+      "entry_time": "2025-09-17 17:26:46.127602",
+      "status": "CLOSED",
+      "exit_day": 2,
+      "exit_time": "2025-09-17 17:26:46.128125",
+      "gross_profit": 1050.0,
+      "charges": 105.0,
+      "net_profit": 945.0
+    },
+    {
+      "id": 2,
+      "etf": "B",
+      "amount": 35000.0,
+      "entry_day": 1,
+      "entry_time": "2025-09-17 17:26:46.127782",
+      "status": "CLOSED",
+      "exit_day": 3,
+      "exit_time": "2025-09-17 17:26:46.128548",
+      "gross_profit": 1050.0,
+      "charges": 105.0,
+      "net_profit": 945.0
+    },
+    {
+      "id": 3,
+      "etf": "C",
+      "amount": 35000.0,
+      "entry_day": 1,
+      "entry_time": "2025-09-17 17:26:46.127910",
+      "status": "CLOSED",
+      "exit_day": 4,
+      "exit_time": "2025-09-17 17:26:46.128958",
+      "gross_profit": 1050.0,
+      "charges": 105.0,
+      "net_profit": 945.0
+    },
+    {
+      "id": 4,
+      "etf": "D",
+      "amount": 35033.075000000004,
+      "entry_day": 2,
+      "entry_time": "2025-09-17 17:26:46.128339",
+      "status": "CLOSED",
+      "exit_day": 5,
+      "exit_time": "2025-09-17 17:26:46.129364",
+      "gross_profit": 1050.99225,
+      "charges": 105.09922500000002,
+      "net_profit": 945.893025
+    }
+  ],
+  "open_trades": [
+    {
+      "id": 5,
+      "etf": "E",
+      "amount": 35066.15,
+      "entry_day": 3,
+      "entry_time": "2025-09-17 17:26:46.128751",
+      "status": "OPEN"
+    },
+    {
+      "id": 6,
+      "etf": "F",
+      "amount": 35099.225,
+      "entry_day": 4,
+      "entry_time": "2025-09-17 17:26:46.129162",
+      "status": "OPEN"
+    },
+    {
+      "id": 7,
+      "etf": "G",
+      "amount": 35132.331255875,
+      "entry_day": 5,
+      "entry_time": "2025-09-17 17:26:46.129573",
+      "status": "OPEN"
+    }
+  ]
+}

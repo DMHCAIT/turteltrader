@@ -1,0 +1,12 @@
+[global]
+developmentMode = false
+dataFrameSerialization = "legacy"
+
+[server]
+headless = true
+port = $PORT
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+gatherUsageStats = false
