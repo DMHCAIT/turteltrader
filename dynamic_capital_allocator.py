@@ -86,6 +86,7 @@ class DynamicCapitalAllocator:
         self.allocated_capital = 0.0
         self.free_capital = self.deployable_capital
         self.active_trades: List[ActiveTrade] = []
+        self.closed_trades: List[ActiveTrade] = []
         self.trade_history: List[Dict] = []
         self.next_trade_id = 1
         

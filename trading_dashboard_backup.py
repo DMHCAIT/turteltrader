@@ -14,20 +14,44 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-import numpy as np
+                    })
+                
+                if positions_data:
+                    df = pd.DataFrame(positions_data)
+                    st.dataframe(df, use_container_width=True)
+                else:
+                    st.info("No live positions found")
+            else:
+                st.info("No live positions found")
+                
+        except Exception as e:
+            st.error(f"Error fetching live positions: {e}")
+    
+    def render_demo_positions(self):
+        """Render demo/simulated positions"""
+        st.subheader("🧪 Demo Positions (Simulated)")t numpy as np
 from datetime import datetime, timedelta
 import json
 import time
-from portfolio_manager import PortfolioManager
-from dynamic_capital_allocator import DynamicCapitalAllocator
-from live_order_executor import LiveOrderExecutor
+from enhanced_capital_manager import CapitalManager, TradingSystemIntegrator
+from simplified_live_trading import SimpleLiveTradingSystem
 from etf_database import etf_db, ETFCategory, ETFInfo
 from real_account_balance import RealAccountBalanceManager
 from smart_session_manager import PermanentBreezeClient
+from live_order_executor import live_executor
+from trading_mode_controller import mode_controller
 from dynamic_capital_allocator import DynamicCapitalAllocator
 from real_time_monitor import RealTimeAccountMonitor, setup_default_monitoring
 import yfinance as yf
 from loguru import logger
+
+# Page configuration
+st.set_page_config(
+    page_title="Turtle Trader Dashboard",
+    page_icon="🐢",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 class TradingDashboard:
     """Trading Dashboard with Dynamic Capital Allocation"""
@@ -37,39 +61,6 @@ class TradingDashboard:
         self.initialize_session_state()
         self.load_or_create_system()
         self.initialize_etf_data()
-    
-    def adapt_capital_manager(self, manager):
-        """Adapt DynamicCapitalAllocator to expected interface"""
-        # Add compatibility properties if they don't exist
-        if not hasattr(manager, 'open_positions'):
-            manager.open_positions = manager.active_trades
-        
-        if not hasattr(manager, 'closed_trades'):
-            manager.closed_trades = []
-            
-        # Add missing methods
-        if not hasattr(manager, 'get_position_size'):
-            def get_position_size(symbol, price):
-                return {'size': manager.per_trade_amount / price, 'amount': manager.per_trade_amount}
-            manager.get_position_size = get_position_size
-        
-        if not hasattr(manager, 'open_position'):
-            def open_position(symbol, price):
-                from dynamic_capital_allocator import TradeSignal
-                signal = TradeSignal(symbol=symbol, signal_type='BUY', price=price, confidence='HIGH')
-                return manager.process_trade_signal(signal)
-            manager.open_position = open_position
-            
-        if not hasattr(manager, 'close_position'):
-            def close_position(symbol, price, reason="Manual close"):
-                # Find the active trade for this symbol
-                for trade in manager.active_trades:
-                    if trade.symbol == symbol:
-                        return manager.close_trade(trade.trade_id, price, reason)
-                return None
-            manager.close_position = close_position
-        
-        return manager
     
     def initialize_session_state(self):
         """Initialize Streamlit session state variables"""
@@ -114,12 +105,16 @@ class TradingDashboard:
             # Legacy system for compatibility
             if st.session_state.capital_manager is None:
                 # Use default parameters from your strategy
-                st.session_state.capital_manager = DynamicCapitalAllocator(
+                st.session_state.capital_manager = CapitalManager(
                     initial_capital=1000000,  # ₹10 lakhs
-                    use_real_balance=True     # Use real account balance
+                    deployment_pct=0.70,      # 70% deployment
+                    reserve_pct=0.30,         # 30% reserve
+                    per_trade_pct=0.05,       # 5% per trade
+                    profit_target=0.03,       # 3% profit target
+                    brokerage_pct=0.003       # 0.3% brokerage
                 )
                 
-                st.session_state.trading_system = LiveOrderExecutor()
+                st.session_state.trading_system = SimpleLiveTradingSystem(1000000)
                 
         except Exception as e:
             st.error(f"Error initializing system: {e}")
@@ -162,7 +157,60 @@ class TradingDashboard:
     
     def render_real_balance_status(self):
         """Render real account balance status"""
-        st.header("🏦 Real Account Balance")
+        st.header("💰 Real Account Balance Integration")
+        
+        # Use live balance if in live mode
+        if mode_controller.is_live_mode():
+            self.render_live_balance()
+        else:
+            self.render_demo_balance()
+    
+    def render_live_balance(self):
+        """Render actual live balance from Breeze API"""
+        try:
+            live_balance = live_executor.get_live_balance()
+            
+            if live_balance:
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        "🔴 Live Cash Available",
+                        f"₹{live_balance.get('available_cash', 0):,.2f}",
+                        help="Real account balance from Breeze API"
+                    )
+                
+                with col2:
+                    st.metric(
+                        "📊 Margin Used", 
+                        f"₹{live_balance.get('margin_used', 0):,.2f}",
+                        help="Currently used margin"
+                    )
+                
+                with col3:
+                    total_balance = live_balance.get('available_cash', 0) + live_balance.get('margin_used', 0)
+                    st.metric(
+                        "💼 Total Balance",
+                        f"₹{total_balance:,.2f}",
+                        help="Total account value"
+                    )
+                
+                # Update capital manager with live balance
+                if total_balance > 0:
+                    manager = st.session_state.capital_manager
+                    manager.update_real_balance(total_balance)
+                    st.success(f"✅ Capital manager updated with live balance: ₹{total_balance:,.2f}")
+            
+            else:
+                st.warning("⚠️ Could not fetch live balance - using configured balance")
+                self.render_demo_balance()
+                
+        except Exception as e:
+            st.error(f"Error fetching live balance: {e}")
+            self.render_demo_balance()
+    
+    def render_demo_balance(self):
+        """Render demo/configured balance"""
         
         col1, col2, col3 = st.columns([2, 1, 1])
         
@@ -278,38 +326,10 @@ class TradingDashboard:
                     st.caption(f"📅 Last Updated: {last_update.strftime('%H:%M:%S')} ({time_diff.total_seconds():.0f}s ago)")
                 
                 else:
-                    error_msg = balance_status.get('error', 'Could not fetch balance')
-                    st.error(f"❌ Balance Error: {error_msg}")
-                    
-                    # Troubleshooting information
-                    with st.expander("🔧 Troubleshooting"):
-                        st.markdown("""
-                        **Common issues and solutions:**
-                        
-                        1. **Session Token Expired**
-                           - Your session token may have expired (typically 8 hours)
-                           - Generate a new session token from ICICI Direct
-                           - Update the token in Streamlit Cloud secrets
-                        
-                        2. **API Credentials Missing**
-                           - Check if API_KEY, API_SECRET are configured in secrets
-                           - Verify credentials are correct in ICICI Direct developer portal
-                        
-                        3. **Network/Server Issues**
-                           - Try refreshing the page
-                           - Check ICICI Direct API server status
-                           - Wait a few minutes and try again
-                        
-                        4. **Trading Hours**
-                           - Live balance updates work only during market hours
-                           - Outside trading hours, use Reference Mode
-                        """)
-                        
-                        st.info("💡 **Recommendation**: Switch to 'Reference Amount' mode to continue testing the system")
+                    st.error(f"❌ Balance Error: {balance_status.get('error', 'Unknown error')}")
             
             except Exception as e:
                 st.error(f"❌ Error fetching real balance: {e}")
-                st.info("💡 Try switching to 'Reference Amount' mode to use the system")
         
         else:
             # Reference mode display
@@ -383,9 +403,9 @@ class TradingDashboard:
         # Current parameters
         st.sidebar.markdown("### Legacy Parameters")
         st.sidebar.metric("Reference Capital", f"₹{manager.total_capital:,.2f}")
-        st.sidebar.metric("Deployment %", f"{manager.deployment_percentage:.0f}%")
-        st.sidebar.metric("Reserve %", f"{manager.reserve_percentage:.0f}%")
-        st.sidebar.metric("Per Trade %", f"{manager.per_trade_percentage:.1f}%")
+        st.sidebar.metric("Deployment %", f"{manager.deployment_pct*100:.0f}%")
+        st.sidebar.metric("Reserve %", f"{manager.reserve_pct*100:.0f}%")
+        st.sidebar.metric("Per Trade %", f"{manager.per_trade_pct*100:.1f}%")
         
         st.sidebar.markdown("---")
         
@@ -393,26 +413,23 @@ class TradingDashboard:
         st.sidebar.markdown("### Adjust Parameters")
         
         new_deployment = st.sidebar.slider(
-            "Deployment %", 50, 90, int(manager.deployment_percentage)
-        )
+            "Deployment %", 50, 90, int(manager.deployment_pct*100)
+        ) / 100
         
         new_per_trade = st.sidebar.slider(
-            "Per Trade %", 1.0, 10.0, manager.per_trade_percentage, step=0.5
-        )
+            "Per Trade %", 1.0, 10.0, manager.per_trade_pct*100, step=0.5
+        ) / 100
         
         new_profit_target = st.sidebar.slider(
-            "Profit Target %", 1.0, 5.0, manager.profit_target_percentage, step=0.1
-        )
+            "Profit Target %", 1.0, 5.0, manager.profit_target*100, step=0.1
+        ) / 100
         
         if st.sidebar.button("Update Parameters", key="update_params_btn"):
-            manager.deployment_percentage = new_deployment
-            manager.reserve_percentage = 100.0 - new_deployment
-            manager.per_trade_percentage = new_per_trade
-            manager.profit_target_percentage = new_profit_target
-            # Recalculate buckets with new percentages
-            manager.deployable_capital = manager.total_capital * (manager.deployment_percentage / 100)
-            manager.reserve_capital = manager.total_capital * (manager.reserve_percentage / 100)
-            manager.per_trade_amount = manager.deployable_capital * (manager.per_trade_percentage / 100)
+            manager.deployment_pct = new_deployment
+            manager.reserve_pct = 1.0 - new_deployment
+            manager.per_trade_pct = new_per_trade
+            manager.profit_target = new_profit_target
+            manager.recalculate_allocations()
             st.sidebar.success("Parameters updated!")
             st.rerun()
 
@@ -453,8 +470,8 @@ class TradingDashboard:
         """Render capital allocation overview"""
         st.header("💰 Capital Allocation Overview")
         
-        manager = self.adapt_capital_manager(st.session_state.capital_manager)
-        summary = manager.get_capital_status()
+        manager = st.session_state.capital_manager
+        summary = manager.get_trading_summary()
         
         # Main metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -462,29 +479,29 @@ class TradingDashboard:
         with col1:
             st.metric(
                 "Total Capital",
-                f"₹{summary['total_capital']:,.0f}",
-                delta=f"₹{summary['total_pnl']:,.0f}"
+                f"₹{summary['current_capital']:,.0f}",
+                delta=f"₹{summary['total_profit']:,.0f}"
             )
         
         with col2:
             st.metric(
                 "Deployment Capital",
                 f"₹{summary['deployment_capital']:,.0f}",
-                delta=f"{manager.deployment_percentage:.0f}%"
+                delta=f"{manager.deployment_pct*100:.0f}%"
             )
         
         with col3:
             st.metric(
                 "Available Capital",
-                f"₹{summary['available_deployment_capital']:,.0f}",
-                delta=f"{100-summary['utilization_percentage']:.0f}% free"
+                f"₹{summary['available_capital']:,.0f}",
+                delta=f"{100-summary['utilization_pct']:.0f}% free"
             )
         
         with col4:
             st.metric(
                 "Reserve Capital",
                 f"₹{summary['reserve_capital']:,.0f}",
-                delta=f"{manager.reserve_percentage:.0f}%"
+                delta=f"{manager.reserve_pct*100:.0f}%"
             )
         
         # Capital allocation chart
@@ -493,7 +510,7 @@ class TradingDashboard:
     def render_capital_allocation_chart(self):
         """Render capital allocation visualization"""
         manager = st.session_state.capital_manager
-        summary = manager.get_capital_status()
+        summary = manager.get_trading_summary()
         
         # Create pie chart for capital allocation
         fig = go.Figure()
@@ -501,7 +518,7 @@ class TradingDashboard:
         # Data for pie chart
         labels = ['Available Deployment', 'Allocated Capital', 'Reserve Capital']
         values = [
-            summary['available_deployment_capital'],
+            summary['available_capital'],
             summary['allocated_capital'],
             summary['reserve_capital']
         ]
@@ -590,7 +607,7 @@ class TradingDashboard:
     def render_trading_capacity(self):
         """Render trading capacity analysis"""
         manager = st.session_state.capital_manager
-        summary = manager.get_capital_status()
+        summary = manager.get_trading_summary()
         
         st.subheader("📊 Trading Capacity Analysis")
         
@@ -598,20 +615,20 @@ class TradingDashboard:
         
         with col1:
             # Capacity metrics
-            max_positions = int(summary['deployment_capital'] / manager.per_trade_amount)
-            current_positions = summary['active_trades']
+            max_positions = int(summary['deployment_capital'] / manager.per_trade_allocation)
+            current_positions = summary['open_positions']
             remaining_capacity = max_positions - current_positions
             
             st.metric("Maximum Positions", max_positions)
             st.metric("Current Positions", current_positions)
             st.metric("Remaining Capacity", remaining_capacity)
-            st.metric("Per Trade Amount", f"₹{manager.per_trade_amount:,.0f}")
+            st.metric("Per Trade Amount", f"₹{manager.per_trade_allocation:,.0f}")
         
         with col2:
             # Capacity utilization chart
             fig = go.Figure(go.Indicator(
                 mode = "gauge+number+delta",
-                value = summary['utilization_percentage'],
+                value = summary['utilization_pct'],
                 domain = {'x': [0, 1], 'y': [0, 1]},
                 title = {'text': "Capital Utilization %"},
                 delta = {'reference': 70, 'position': "top"},
@@ -639,7 +656,7 @@ class TradingDashboard:
         st.header("📈 Performance Analytics")
         
         manager = st.session_state.capital_manager
-        summary = manager.get_capital_status()
+        summary = manager.get_trading_summary()
         
         # Performance metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -647,22 +664,21 @@ class TradingDashboard:
         with col1:
             st.metric(
                 "Total Profit",
-                f"₹{summary['total_pnl']:,.0f}",
-                delta=f"{summary.get('total_profit_pct', 0):.3f}%"
+                f"₹{summary['total_profit']:,.0f}",
+                delta=f"{summary['total_profit_pct']:.3f}%"
             )
         
         with col2:
             st.metric(
                 "Trades Completed",
-                summary['trades_closed'],
+                summary['total_trades_completed'],
                 delta="trades"
             )
         
         with col3:
-            avg_profit = summary['total_pnl'] / summary['trades_closed'] if summary['trades_closed'] > 0 else 0
             st.metric(
                 "Avg Profit/Trade",
-                f"₹{avg_profit:,.0f}",
+                f"₹{summary['avg_profit_per_trade']:,.0f}",
                 delta="per trade"
             )
         
@@ -762,14 +778,45 @@ class TradingDashboard:
                         st.error(f"❌ Cannot trade: {position_info.get('reason', 'Unknown')}")
                 
                 if submit and symbol and current_price:
-                    manager = st.session_state.capital_manager
-                    position = manager.open_position(symbol, current_price)
+                    # Check if in live mode
+                    if mode_controller.is_live_mode():
+                        # LIVE TRADING MODE
+                        st.warning("🔴 **LIVE MODE**: This will place a real order!")
+                        
+                        # Calculate position size
+                        manager = st.session_state.capital_manager
+                        position_info = manager.get_position_size(symbol, current_price)
+                        
+                        if position_info['can_trade']:
+                            quantity = position_info['shares']
+                            
+                            # Place live order
+                            order_id = live_executor.place_live_order(
+                                symbol=symbol,
+                                action="BUY",
+                                quantity=quantity,
+                                order_type="MARKET",
+                                product="MTF"
+                            )
+                            
+                            if order_id:
+                                # Also update internal tracking
+                                position = manager.open_position(symbol, current_price)
+                                st.success(f"✅ **LIVE ORDER PLACED**: {symbol} x {quantity}")
+                                st.rerun()
+                        else:
+                            st.error(f"❌ Cannot trade: {position_info.get('reason', 'Unknown')}")
                     
-                    if position:
-                        st.success(f"✅ Opened position in {symbol}")
-                        st.rerun()
                     else:
-                        st.error("❌ Failed to open position")
+                        # DEMO MODE
+                        manager = st.session_state.capital_manager
+                        position = manager.open_position(symbol, current_price)
+                        
+                        if position:
+                            st.success(f"✅ Demo position opened in {symbol}")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to open position")
         
         with col2:
             st.subheader("Quick Actions")
@@ -788,7 +835,7 @@ class TradingDashboard:
             
             # Reset system button
             if st.button("🔄 Reset System", key="reset_system_btn"):
-                st.session_state.capital_manager = DynamicCapitalAllocator(initial_capital=1000000, use_real_balance=True)
+                st.session_state.capital_manager = CapitalManager(1000000, 0.70, 0.30, 0.05, 0.03, 0.003)
                 st.success("System reset")
                 st.rerun()
     
@@ -935,6 +982,10 @@ class TradingDashboard:
             # Sidebar configuration
             self.render_capital_configuration()
             self.render_session_management()
+            
+            # Trading mode control
+            current_mode = mode_controller.render_mode_selector()
+            
             self.render_strategy_rules()
             
             # Main content - Real Balance Integration

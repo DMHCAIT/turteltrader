@@ -61,7 +61,8 @@ class RealAccountBalanceManager:
             # Get account funds
             funds_response = self.api_client.get_account_funds()
             if not funds_response:
-                logger.error("❌ Failed to fetch account funds")
+                logger.error("❌ Failed to fetch account funds - Check API connection and credentials")
+                logger.error("💡 Possible issues: 1) Session token expired 2) API credentials missing 3) Network timeout")
                 return None
             
             # Get portfolio holdings
