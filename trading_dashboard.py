@@ -42,6 +42,7 @@ class TradingDashboard:
         """Initialize dashboard components"""
         self.initialize_session_state()
         self.load_or_create_system()
+        self.initialize_etf_data()
     
     def initialize_session_state(self):
         """Initialize Streamlit session state variables"""
@@ -99,6 +100,25 @@ class TradingDashboard:
                 
         except Exception as e:
             st.error(f"Error initializing system: {e}")
+    
+    def initialize_etf_data(self):
+        """Initialize ETF database attributes"""
+        try:
+            # Initialize ETF data attributes
+            self.liquid_etfs = etf_db.get_liquid_etfs()
+            self.sector_etfs = etf_db.get_sector_etfs()
+            
+            logger.info(f"✅ ETF data initialized - {len(self.liquid_etfs)} liquid ETFs loaded")
+            
+        except Exception as e:
+            logger.error(f"❌ Error initializing ETF data: {e}")
+            # Fallback to basic ETF lists
+            self.liquid_etfs = ['NIFTYBEES.NS', 'BANKBEES.NS', 'GOLDBEES.NS']
+            self.sector_etfs = {
+                'Broad Market': ['NIFTYBEES.NS', 'JUNIORBEES.NS'],
+                'Banking': ['BANKBEES.NS'],
+                'Commodity': ['GOLDBEES.NS']
+            }
     
     def render_header(self):
         """Render dashboard header"""
