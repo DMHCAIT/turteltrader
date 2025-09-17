@@ -22,6 +22,7 @@ from enhanced_capital_manager import CapitalManager, TradingSystemIntegrator
 from simplified_live_trading import SimpleLiveTradingSystem
 from etf_database import etf_db, ETFCategory, ETFInfo
 from real_account_balance import RealAccountBalanceManager
+from smart_session_manager import PermanentBreezeClient
 from dynamic_capital_allocator import DynamicCapitalAllocator
 from real_time_monitor import RealTimeAccountMonitor, setup_default_monitoring
 import yfinance as yf
@@ -361,6 +362,39 @@ class TradingDashboard:
             manager.recalculate_allocations()
             st.sidebar.success("Parameters updated!")
             st.rerun()
+
+    def render_session_management(self):
+        """Render session token management panel"""
+        st.sidebar.header("🔐 Session Management")
+        
+        try:
+            from smart_session_manager import permanent_client
+            
+            # Check current session status
+            cached_token = permanent_client.session_manager._load_cached_token()
+            
+            if cached_token:
+                # Show token status
+                expiry = cached_token.get('expiry', 'Unknown')
+                if expiry != 'Unknown':
+                    from datetime import datetime
+                    expiry_dt = datetime.fromisoformat(expiry)
+                    if datetime.now() < expiry_dt:
+                        st.sidebar.success(f"✅ Active until {expiry_dt.strftime('%H:%M')}")
+                    else:
+                        st.sidebar.warning("⏰ Token expired - needs refresh")
+                else:
+                    st.sidebar.info("📋 Token loaded")
+            else:
+                st.sidebar.error("❌ No active session")
+            
+            # Quick token refresh button
+            if st.sidebar.button("🔄 Refresh Session", key="refresh_session_btn"):
+                # This will trigger the token input interface
+                permanent_client.session_manager._get_fresh_token()
+                
+        except Exception as e:
+            st.sidebar.error(f"Session manager error: {str(e)}")
     
     def render_capital_overview(self):
         """Render capital allocation overview"""
@@ -846,6 +880,7 @@ class TradingDashboard:
             
             # Sidebar configuration
             self.render_capital_configuration()
+            self.render_session_management()
             self.render_strategy_rules()
             
             # Main content - Real Balance Integration
