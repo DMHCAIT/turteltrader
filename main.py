@@ -1,9 +1,9 @@
 """
-Turtle Trader - from data_manager import data_manager
-from portfolio_manager import PortfolioManager
-from notification_system import notification_manager
-from etf_manager import etf_order_manager, ETFOrderType, ETFOrderRequestn Trading Engine
+Turtle Trader - Main Trading Engine
+===================================
+
 Orchestrates the entire trading system with AI/ML integration
+Handles data collection, strategy execution, and order management
 """
 
 import asyncio
@@ -50,6 +50,9 @@ class TradingEngine:
         self.portfolio_manager = PortfolioManager()
         self.notification_manager = NotificationManager()
         
+        # Initialize API client
+        self.api_client = BreezeAPIClient()
+        
         # Trading parameters from config
         self.symbols_to_trade = self._load_trading_universe()
         self.update_frequency = config.getint("MARKET_DATA", "UPDATE_FREQUENCY", 1)
@@ -67,7 +70,7 @@ class TradingEngine:
         self.data_thread = None
         self.risk_thread = None
         
-        logger.info("Trading Engine initialized")
+        logger.info("Trading Engine initialized with API client")
     
     def start(self):
         """Start the trading engine"""
@@ -81,7 +84,7 @@ class TradingEngine:
             if not session_token:
                 raise ValueError("Session token not configured")
             
-            api_client.authenticate(session_token)
+            self.api_client.authenticate(session_token)
             logger.info("Successfully authenticated with Breeze API")
             
             # Initialize data manager
@@ -139,7 +142,7 @@ class TradingEngine:
         self.data_manager.stop()
         
         # Close API connection
-        api_client.close()
+        self.api_client.close()
         
         logger.info("Trading Engine stopped")
         
@@ -240,7 +243,7 @@ class TradingEngine:
             try:
                 if self.state.is_market_open:
                     # Get current positions
-                    positions = api_client.get_positions()
+                    positions = self.api_client.get_positions()
                     
                     if positions:
                         # Get returns data for risk calculation
@@ -294,7 +297,7 @@ class TradingEngine:
         self.last_signals[symbol] = consensus_signal
         
         # Check if we should act on this signal
-        current_positions = api_client.get_positions()
+        current_positions = self.api_client.get_positions()
         
         if not strategy_manager.strategies['Turtle Strategy'].validate_signal(
             consensus_signal, {pos.symbol: pos for pos in current_positions}
@@ -392,7 +395,7 @@ class TradingEngine:
         for order in self.order_queue:
             try:
                 # Place order via API
-                order_id = api_client.place_order(
+                order_id = self.api_client.place_order(
                     symbol=order['symbol'],
                     exchange=order['exchange'],
                     product=order['product'],
@@ -433,7 +436,7 @@ class TradingEngine:
         """Update portfolio state information"""
         try:
             # Get current positions
-            positions = api_client.get_positions()
+            positions = self.api_client.get_positions()
             self.state.active_positions = len([p for p in positions if p.quantity != 0])
             
             # Calculate daily P&L
@@ -446,7 +449,7 @@ class TradingEngine:
             # Get pending orders count
             try:
                 today = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
-                orders = api_client.get_order_list(Constants.NSE, today, today)
+                orders = self.api_client.get_order_list(Constants.NSE, today, today)
                 self.state.pending_orders = len([o for o in orders if o.get('status') == 'Ordered'])
             except:
                 self.state.pending_orders = 0
@@ -474,7 +477,7 @@ class TradingEngine:
     def _reduce_portfolio_risk(self):
         """Reduce portfolio risk by closing riskiest positions"""
         try:
-            positions = api_client.get_positions()
+            positions = self.api_client.get_positions()
             if not positions:
                 return
             
@@ -502,7 +505,7 @@ class TradingEngine:
                     # Square off position
                     action = Constants.SELL if position.quantity > 0 else Constants.BUY
                     
-                    api_client.square_off_position(
+                    self.api_client.square_off_position(
                         symbol=position.symbol,
                         exchange=position.exchange,
                         product=position.product_type,
@@ -518,13 +521,13 @@ class TradingEngine:
     def _close_all_positions(self):
         """Close all open positions"""
         try:
-            positions = api_client.get_positions()
+            positions = self.api_client.get_positions()
             
             for position in positions:
                 if position.quantity != 0:
                     action = Constants.SELL if position.quantity > 0 else Constants.BUY
                     
-                    api_client.square_off_position(
+                    self.api_client.square_off_position(
                         symbol=position.symbol,
                         exchange=position.exchange,
                         product=position.product_type,
@@ -544,11 +547,11 @@ class TradingEngine:
             
             for exchange in [Constants.NSE, Constants.NFO]:
                 try:
-                    orders = api_client.get_order_list(exchange, today, today)
+                    orders = self.api_client.get_order_list(exchange, today, today)
                     
                     for order in orders:
                         if order.get('status') == 'Ordered':
-                            api_client.cancel_order(order['order_id'], exchange)
+                            self.api_client.cancel_order(order['order_id'], exchange)
                             logger.info(f"Cancelled order: {order['order_id']}")
                 except:
                     continue
