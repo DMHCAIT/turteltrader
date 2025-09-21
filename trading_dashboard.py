@@ -135,13 +135,8 @@ class TradingDashboard:
             
         except Exception as e:
             logger.error(f"❌ Error initializing ETF data: {e}")
-            # Fallback to basic ETF lists
-            self.liquid_etfs = ['NIFTYBEES.NS', 'BANKBEES.NS', 'GOLDBEES.NS']
-            self.sector_etfs = {
-                'Broad Market': ['NIFTYBEES.NS', 'JUNIORBEES.NS'],
-                'Banking': ['BANKBEES.NS'],
-                'Commodity': ['GOLDBEES.NS']
-            }
+            # NO FALLBACKS - Must connect to real Breeze API
+            raise ConnectionError("Failed to initialize ETF data from Breeze API. No fallback data allowed.")
     
     def render_header(self):
         """Render dashboard header"""
@@ -680,31 +675,23 @@ class TradingDashboard:
         """Render performance visualization charts"""
         manager = st.session_state.capital_manager
         
-        # Get real account data from Breeze API
-        try:
-            from breeze_api_client import BreezeAPIClient
-            client = BreezeAPIClient()
-            
-            # Get real account balance and positions
-            funds = client.get_funds()
-            positions = client.get_positions()
-            
-            # Use real data for charts
-            current_balance = float(funds.get('Cash', manager.initial_capital))
-            active_positions = len([p for p in positions if p.quantity != 0])
-            
-            # Create date range for historical context
-            dates = pd.date_range(start=datetime.now()-timedelta(days=30), end=datetime.now(), freq='D')
-            
-            # Use actual current balance as endpoint
-            capital_values = [manager.initial_capital] * (len(dates) - 1) + [current_balance]
-            
-        except Exception as e:
-            st.warning(f"Unable to fetch real-time data: {e}")
-            # Fallback to manager data only
-            dates = [datetime.now()]
-            capital_values = [manager.get_current_balance()]
-            active_positions = 0
+        # Get REAL account data from Breeze API - NO FALLBACKS ALLOWED
+        from breeze_api_client import BreezeAPIClient
+        client = BreezeAPIClient()
+        
+        # Get real account balance and positions - MUST SUCCEED
+        funds = client.get_funds()
+        positions = client.get_positions()
+        
+        # Use ONLY real data for charts - NO DEFAULTS
+        current_balance = float(funds.get('Cash', 0))
+        active_positions = len([p for p in positions if p.quantity != 0])
+        
+        # Create date range for historical context
+        dates = pd.date_range(start=datetime.now()-timedelta(days=30), end=datetime.now(), freq='D')
+        
+        # Use actual current balance as endpoint - REAL DATA ONLY
+        capital_values = [current_balance] * len(dates)
         
         # Capital growth chart
         fig = make_subplots(

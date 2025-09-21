@@ -47,10 +47,10 @@ class AIPredictor:
                 self.is_initialized = True
                 logger.info("AI models loaded successfully")
             else:
-                logger.info("Using fallback prediction mode (ML models not available)")
-                self.is_initialized = True
+                logger.error("ML models not available - AI predictions disabled")
+                self.is_initialized = False
         except Exception as e:
-            logger.warning(f"Failed to load AI models: {e}")
+            logger.error(f"Failed to load AI models: {e}")
             self.is_initialized = False
     
     def predict_price(self, symbol: str, data: pd.DataFrame) -> Optional[PredictionResult]:
@@ -72,7 +72,7 @@ class AIPredictor:
                 logger.warning(f"Insufficient data for prediction: {symbol}")
                 return None
             
-            # Simple trend-based prediction as fallback
+            # Simple trend-based prediction when ML models available
             recent_prices = data['close'].tail(5).values
             price_change = (recent_prices[-1] - recent_prices[0]) / recent_prices[0]
             

@@ -11,7 +11,7 @@ import sqlite3
 import threading
 import time
 from loguru import logger
-import yfinance as yf
+# yfinance import removed - using only Breeze API for real data
 
 from core.config import config, Constants
 from core.api_client import api_client
@@ -79,7 +79,7 @@ class DataManager:
     def get_historical_data(self, symbol: str, days: int = 30, 
                           interval: str = Constants.DAY,
                           exchange: str = Constants.NSE) -> pd.DataFrame:
-        """Get historical data for a symbol"""
+        """Get historical data for a symbol from Breeze API only - no fallbacks allowed"""
         
         # Check cache first
         cache_key = f"{symbol}_{interval}_{days}"
@@ -87,7 +87,7 @@ class DataManager:
             return self.cache[cache_key]
         
         try:
-            # Try Breeze API first
+            # Only use Breeze API - no fallbacks
             to_date = datetime.now()
             from_date = to_date - timedelta(days=days)
             
@@ -108,38 +108,13 @@ class DataManager:
                 self._cache_data(cache_key, data)
                 
                 return data
+            else:
+                raise ConnectionError(f"Breeze API returned empty data for {symbol}")
             
         except Exception as e:
-            logger.warning(f"Breeze API failed for {symbol}: {e}")
-        
-        # Fallback to Yahoo Finance
-        try:
-            yf_symbol = self._convert_to_yf_symbol(symbol)
-            yf_data = yf.download(yf_symbol, period=f"{days}d", interval=self._convert_interval(interval))
-            
-            if not yf_data.empty:
-                # Convert to standard format
-                data = pd.DataFrame({
-                    'open': yf_data['Open'],
-                    'high': yf_data['High'],
-                    'low': yf_data['Low'],
-                    'close': yf_data['Close'],
-                    'volume': yf_data['Volume']
-                })
-                
-                # Store in database
-                self._store_data(symbol, exchange, data, interval)
-                
-                # Cache the data
-                self._cache_data(cache_key, data)
-                
-                return data
-            
-        except Exception as e:
-            logger.warning(f"Yahoo Finance failed for {symbol}: {e}")
-        
-        # Try database as last resort
-        return self._get_data_from_db(symbol, exchange, days, interval)
+            logger.error(f"Breeze API failed for {symbol}: {e}")
+            # NO FALLBACKS - RAISE ERROR TO FORCE REAL API CONNECTION
+            raise ConnectionError(f"Failed to get real data from Breeze API for {symbol}. No fallback data allowed.")
     
     def get_real_time_data(self, symbol: str, exchange: str = Constants.NSE) -> pd.DataFrame:
         """Get real-time data for a symbol"""
@@ -259,19 +234,7 @@ class DataManager:
                 logger.error(f"Error in background data update: {e}")
                 time.sleep(60)
     
-    def _convert_to_yf_symbol(self, symbol: str) -> str:
-        """Convert Indian stock symbol to Yahoo Finance format"""
-        return f"{symbol}.NS"  # NSE suffix
-    
-    def _convert_interval(self, interval: str) -> str:
-        """Convert interval to Yahoo Finance format"""
-        interval_map = {
-            Constants.MINUTE_1: "1m",
-            Constants.MINUTE_5: "5m",
-            Constants.MINUTE_30: "30m",
-            Constants.DAY: "1d"
-        }
-        return interval_map.get(interval, "1d")
+    # Yahoo Finance functions removed - using only Breeze API for real data
 
 # Export main class
 __all__ = ['DataManager']
