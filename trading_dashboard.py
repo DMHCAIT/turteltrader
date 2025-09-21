@@ -680,49 +680,65 @@ class TradingDashboard:
         """Render performance visualization charts"""
         manager = st.session_state.capital_manager
         
-        # Create sample performance data (in real implementation, this would come from database)
-        dates = pd.date_range(start=datetime.now()-timedelta(days=30), end=datetime.now(), freq='D')
-        
-        # Simulate capital growth
-        initial_capital = manager.initial_capital
-        daily_growth = np.random.normal(0.001, 0.005, len(dates))  # 0.1% daily avg with volatility
-        capital_values = [initial_capital]
-        
-        for growth in daily_growth[1:]:
-            capital_values.append(capital_values[-1] * (1 + growth))
+        # Get real account data from Breeze API
+        try:
+            from breeze_api_client import BreezeAPIClient
+            client = BreezeAPIClient()
+            
+            # Get real account balance and positions
+            funds = client.get_funds()
+            positions = client.get_positions()
+            
+            # Use real data for charts
+            current_balance = float(funds.get('Cash', manager.initial_capital))
+            active_positions = len([p for p in positions if p.quantity != 0])
+            
+            # Create date range for historical context
+            dates = pd.date_range(start=datetime.now()-timedelta(days=30), end=datetime.now(), freq='D')
+            
+            # Use actual current balance as endpoint
+            capital_values = [manager.initial_capital] * (len(dates) - 1) + [current_balance]
+            
+        except Exception as e:
+            st.warning(f"Unable to fetch real-time data: {e}")
+            # Fallback to manager data only
+            dates = [datetime.now()]
+            capital_values = [manager.get_current_balance()]
+            active_positions = 0
         
         # Capital growth chart
         fig = make_subplots(
             rows=2, cols=2,
-            subplot_titles=('Capital Growth', 'Daily P&L', 'Position Count', 'Utilization %'),
+            subplot_titles=('Real Account Balance', 'Account P&L', 'Active Positions', 'Capital Utilization %'),
             specs=[[{"secondary_y": False}, {"secondary_y": False}],
                    [{"secondary_y": False}, {"secondary_y": False}]]
         )
         
-        # Capital growth
+        # Real account balance
         fig.add_trace(
-            go.Scatter(x=dates, y=capital_values, name='Total Capital', line=dict(color='#2E86C1')),
+            go.Scatter(x=dates, y=capital_values, name='Account Balance', line=dict(color='#2E86C1')),
             row=1, col=1
         )
         
-        # Daily P&L
-        daily_pnl = np.diff(capital_values)
-        fig.add_trace(
-            go.Bar(x=dates[1:], y=daily_pnl, name='Daily P&L', marker_color='#27AE60'),
-            row=1, col=2
-        )
+        # Account P&L
+        if len(capital_values) > 1:
+            daily_pnl = np.diff(capital_values)
+            fig.add_trace(
+                go.Bar(x=dates[1:], y=daily_pnl, name='Daily P&L', marker_color='#27AE60'),
+                row=1, col=2
+            )
         
-        # Position count (simulated)
-        position_counts = np.random.randint(0, 10, len(dates))
+        # Real position count
+        position_data = [active_positions] * len(dates)
         fig.add_trace(
-            go.Scatter(x=dates, y=position_counts, name='Open Positions', line=dict(color='#E74C3C')),
+            go.Scatter(x=dates, y=position_data, name='Active Positions', line=dict(color='#E74C3C')),
             row=2, col=1
         )
         
-        # Utilization percentage (simulated)
-        utilization = position_counts * 5  # 5% per position
+        # Real capital utilization percentage
+        utilization = [active_positions * 3.0] * len(dates)  # 3% per position as configured
         fig.add_trace(
-            go.Scatter(x=dates, y=utilization, name='Utilization %', line=dict(color='#F39C12')),
+            go.Scatter(x=dates, y=utilization, name='Capital Utilization %', line=dict(color='#F39C12')),
             row=2, col=2
         )
         

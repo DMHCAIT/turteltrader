@@ -23,10 +23,10 @@ class TradingModeController:
             if os.path.exists(self.mode_file):
                 with open(self.mode_file, 'r') as f:
                     data = json.load(f)
-                return data.get('mode', 'DEMO')
+                return data.get('mode', 'LIVE')
         except Exception:
             pass
-        return 'DEMO'
+        return 'LIVE'
     
     def save_mode(self, mode: str):
         """Save trading mode"""
