@@ -350,24 +350,28 @@ class ETFOrderManager:
         return allocation
     
     def _get_available_capital(self) -> float:
-        """Get available capital for trading"""
+        """Get available capital from real ICICI account balance only"""
         
         try:
-            funds = api_client.get_funds()
+            # Use RealAccountBalanceManager for accurate balance
+            from real_account_balance import RealAccountBalanceManager
+            balance_manager = RealAccountBalanceManager()
             
-            if funds and isinstance(funds, dict):
-                # Extract available margin/cash
-                available = float(funds.get('available_margin', 0))
-                if available == 0:
-                    available = float(funds.get('available_cash', 0))
-                
-                return available
+            # Get real account balance
+            balance = balance_manager.get_current_balance()
+            
+            if balance:
+                logger.info(f"💰 Real Account Balance: ₹{balance.free_cash:,.2f}")
+                logger.info(f"💼 Portfolio Value: ₹{balance.portfolio_value:,.2f}")
+                logger.info(f"🎯 Deployable Capital: ₹{balance.deployable_capital:,.2f}")
+                return balance.deployable_capital
+            else:
+                logger.error("❌ Could not fetch real account balance")
+                raise ConnectionError("Failed to fetch real ICICI account balance - no static fallback allowed")
             
         except Exception as e:
-            logger.error(f"Error getting available capital: {e}")
-        
-        # Fallback to configured capital
-        return config.getfloat("TRADING", "CAPITAL", 1000000)
+            logger.error(f"❌ Error getting real account capital: {e}")
+            raise ConnectionError("Must connect to real ICICI account - no static capital fallback allowed")
 
 # Create global ETF order manager instance
 etf_order_manager = ETFOrderManager()

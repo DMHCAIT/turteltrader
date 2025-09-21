@@ -307,23 +307,63 @@ class TradingDashboard:
                 st.info("💡 Try switching to 'Reference Amount' mode to use the system")
         
         else:
-            # Reference mode display
-            if st.session_state.dynamic_allocator:
-                st.info("📊 Using reference capital allocation (₹10,00,000)")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Total Capital", f"₹{st.session_state.dynamic_allocator.total_capital:,.2f}")
-                
-                with col2:
-                    st.metric("Deployable (70%)", f"₹{st.session_state.dynamic_allocator.deployable_capital:,.2f}")
-                
-                with col3:
-                    st.metric("Reserve (30%)", f"₹{st.session_state.dynamic_allocator.reserve_capital:,.2f}")
-                
-                with col4:
-                    st.metric("Per Trade (5%)", f"₹{st.session_state.dynamic_allocator.per_trade_amount:,.2f}")
+            # Real ICICI Account Balance Display
+            if st.session_state.real_balance_manager:
+                try:
+                    # Get fresh account balance
+                    balance = st.session_state.real_balance_manager.get_current_balance()
+                    
+                    if balance:
+                        st.success(f"💰 **LIVE ICICI Account Balance** (Updated: {balance.timestamp.strftime('%H:%M:%S')})")
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.metric(
+                                "💳 Available Cash", 
+                                f"₹{balance.available_cash:,.2f}",
+                                help="Total cash available in your ICICI account"
+                            )
+                        
+                        with col2:
+                            st.metric(
+                                "🎯 Deployable (70%)", 
+                                f"₹{balance.deployable_capital:,.2f}",
+                                help="70% of free cash available for trading"
+                            )
+                        
+                        with col3:
+                            st.metric(
+                                "🛡️ Reserve (30%)", 
+                                f"₹{balance.reserve_capital:,.2f}",
+                                help="30% reserve capital for safety"
+                            )
+                        
+                        with col4:
+                            st.metric(
+                                "💸 Per Trade (5%)", 
+                                f"₹{balance.per_trade_capital:,.2f}",
+                                help="5% of deployable capital per trade"
+                            )
+                        
+                        # Additional account info
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("📊 Portfolio Value", f"₹{balance.portfolio_value:,.2f}")
+                        with col2:
+                            st.metric("📈 Total Balance", f"₹{balance.total_balance:,.2f}")
+                        with col3:
+                            st.metric("🔒 Margin Used", f"₹{balance.margin_used:,.2f}")
+                            
+                    else:
+                        st.error("❌ Could not fetch real account balance - Check API connection")
+                        
+                except Exception as e:
+                    st.error(f"❌ Account balance error: {str(e)}")
+                    st.info("💡 Try refreshing session token if this persists")
+            
+            else:
+                st.warning("⚠️ Real balance manager not initialized - Initialize system first")
         
         # Monitor status
         if st.session_state.real_time_monitor:
