@@ -2,8 +2,9 @@
 🏛️ COMPREHENSIVE ETF UNIVERSE CONFIGURATION
 =========================================
 
-Complete list of 65 ETFs available in Indian market, organized by categories
+Complete list of 61 ETFs as specified by user, organized by categories
 for optimal monitoring and trading strategy implementation.
+All symbols exactly as requested - no segregation or separation.
 """
 
 from typing import Dict, List, Tuple
@@ -29,7 +30,7 @@ class ETFRiskLevel(Enum):
     VERY_HIGH = "Very High"
 
 
-# Complete ETF Universe with metadata
+# Complete ETF Universe with all your specified symbols
 ETF_UNIVERSE: Dict[str, Dict] = {
     
     # MAJOR INDEX ETFs - Core Indian market exposure
@@ -39,7 +40,7 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'tracking': 'Nifty 50',
         'risk_level': ETFRiskLevel.LOW,
         'liquidity': 'HIGH',
-        'priority': 1,  # Highest priority
+        'priority': 1,
         'allocation_weight': 1.0
     },
     'UTISENSETF': {
@@ -59,6 +60,24 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'liquidity': 'HIGH',
         'priority': 2,
         'allocation_weight': 0.8
+    },
+    'MOM150ETF': {
+        'name': 'Motilal Oswal Nifty Midcap 150 ETF',
+        'category': ETFCategory.MAJOR_INDEX,
+        'tracking': 'Nifty Midcap 150',
+        'risk_level': ETFRiskLevel.HIGH,
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
+    },
+    'MOM250ETF': {
+        'name': 'Motilal Oswal Nifty Smallcap 250 ETF',
+        'category': ETFCategory.MAJOR_INDEX,
+        'tracking': 'Nifty Smallcap 250',
+        'risk_level': ETFRiskLevel.VERY_HIGH,
+        'liquidity': 'LOW',
+        'priority': 4,
+        'allocation_weight': 0.4
     },
     'ICICINXT50': {
         'name': 'ICICI Prudential Nifty Next 50 ETF',
@@ -96,32 +115,14 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'priority': 3,
         'allocation_weight': 0.6
     },
-    'MOM150ETF': {
-        'name': 'Motilal Oswal Nifty Midcap 150 ETF',
-        'category': ETFCategory.MAJOR_INDEX,
-        'tracking': 'Nifty Midcap 150',
-        'risk_level': ETFRiskLevel.HIGH,
-        'liquidity': 'MEDIUM',
-        'priority': 4,
-        'allocation_weight': 0.4
-    },
-    'MOM250ETF': {
-        'name': 'Motilal Oswal Nifty Smallcap 250 ETF',
-        'category': ETFCategory.MAJOR_INDEX,
-        'tracking': 'Nifty Smallcap 250',
-        'risk_level': ETFRiskLevel.VERY_HIGH,
-        'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
-    },
     'MOMMICROETF': {
         'name': 'Motilal Oswal Nifty Microcap 250 ETF',
         'category': ETFCategory.MAJOR_INDEX,
         'tracking': 'Nifty Microcap 250',
         'risk_level': ETFRiskLevel.VERY_HIGH,
         'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'priority': 4,
+        'allocation_weight': 0.4
     },
     
     # SECTORAL ETFs - Sector-specific exposure
@@ -180,13 +181,13 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'allocation_weight': 0.6
     },
     'INFRAETF': {
-        'name': 'Nippon India ETF Nifty Infra',
+        'name': 'Nippon India ETF Nifty Infrastructure',
         'category': ETFCategory.SECTORAL,
         'tracking': 'Nifty Infrastructure',
         'risk_level': ETFRiskLevel.HIGH,
         'liquidity': 'MEDIUM',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'AUTOETF': {
         'name': 'Nippon India ETF Nifty Auto',
@@ -203,8 +204,8 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'tracking': 'Nifty Realty',
         'risk_level': ETFRiskLevel.VERY_HIGH,
         'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'priority': 4,
+        'allocation_weight': 0.4
     },
     'MEDIAETF': {
         'name': 'Nippon India ETF Nifty Media',
@@ -212,8 +213,8 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'tracking': 'Nifty Media',
         'risk_level': ETFRiskLevel.VERY_HIGH,
         'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'priority': 4,
+        'allocation_weight': 0.4
     },
     'PRBANKETF': {
         'name': 'Nippon India ETF Nifty Private Bank',
@@ -238,9 +239,9 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'category': ETFCategory.SECTORAL,
         'tracking': 'Nifty Commodities',
         'risk_level': ETFRiskLevel.VERY_HIGH,
-        'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'liquidity': 'MEDIUM',
+        'priority': 4,
+        'allocation_weight': 0.4
     },
     'SERVICESETF': {
         'name': 'Nippon India ETF Nifty Services Sector',
@@ -248,8 +249,8 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'tracking': 'Nifty Services Sector',
         'risk_level': ETFRiskLevel.HIGH,
         'liquidity': 'MEDIUM',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'CONSUMETF': {
         'name': 'Nippon India ETF Nifty Consumption',
@@ -276,9 +277,9 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'category': ETFCategory.STRATEGY_FACTOR,
         'tracking': 'Nifty Growth Sectors 15',
         'risk_level': ETFRiskLevel.HIGH,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'MNCETF': {
         'name': 'Nippon India ETF Nifty MNC',
@@ -321,36 +322,36 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'category': ETFCategory.STRATEGY_FACTOR,
         'tracking': 'Nifty Equal Weight',
         'risk_level': ETFRiskLevel.MEDIUM,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'ALPHALVETF': {
         'name': 'Nippon India ETF Nifty Alpha Low Volatility 30',
         'category': ETFCategory.STRATEGY_FACTOR,
         'tracking': 'Nifty Alpha Low Volatility 30',
         'risk_level': ETFRiskLevel.LOW,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'ALPHA50ETF': {
         'name': 'Nippon India ETF Nifty Alpha 50',
         'category': ETFCategory.STRATEGY_FACTOR,
         'tracking': 'Nifty Alpha 50',
         'risk_level': ETFRiskLevel.MEDIUM,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'EDELMOM30': {
         'name': 'Edelweiss Nifty Momentum 30 ETF',
         'category': ETFCategory.STRATEGY_FACTOR,
         'tracking': 'Nifty Momentum 30',
         'risk_level': ETFRiskLevel.HIGH,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     
     # GOVERNMENT SECURITIES & BONDS - Fixed income
@@ -359,18 +360,18 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'category': ETFCategory.GOVT_BONDS,
         'tracking': 'Nifty 8-13 Years G-Sec',
         'risk_level': ETFRiskLevel.LOW,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'GS5YEARETF': {
         'name': 'Nippon India ETF Nifty 5 Year Benchmark G-Sec',
         'category': ETFCategory.GOVT_BONDS,
         'tracking': 'Nifty 5 Year Benchmark G-Sec',
         'risk_level': ETFRiskLevel.LOW,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'BHARATBONDETFAPR30': {
         'name': 'Bharat Bond ETF April 2030',
@@ -404,36 +405,36 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'category': ETFCategory.GOVT_BONDS,
         'tracking': 'Nifty 1D Rate Index',
         'risk_level': ETFRiskLevel.LOW,
-        'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'SBISDL26ETF': {
         'name': 'SBI ETF Nifty SDL April 2026',
         'category': ETFCategory.GOVT_BONDS,
         'tracking': 'State Development Loans maturing April 2026',
         'risk_level': ETFRiskLevel.LOW,
-        'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'ICICISDL27ETF': {
         'name': 'ICICI Prudential Nifty SDL Dec 2027 ETF',
         'category': ETFCategory.GOVT_BONDS,
         'tracking': 'SDLs maturing Dec 2027',
         'risk_level': ETFRiskLevel.LOW,
-        'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'HDFCGSEC30ETF': {
         'name': 'HDFC Nifty G-Sec Dec 2030 Index ETF',
         'category': ETFCategory.GOVT_BONDS,
         'tracking': 'G-Secs maturing Dec 2030',
         'risk_level': ETFRiskLevel.LOW,
-        'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     
     # INTERNATIONAL ETFs - Global exposure
@@ -469,18 +470,27 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'category': ETFCategory.INTERNATIONAL,
         'tracking': 'MSCI EAFE',
         'risk_level': ETFRiskLevel.HIGH,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'MOEMETF': {
         'name': 'Motilal Oswal MSCI Emerging Markets ETF',
         'category': ETFCategory.INTERNATIONAL,
         'tracking': 'MSCI Emerging Markets',
         'risk_level': ETFRiskLevel.VERY_HIGH,
-        'liquidity': 'LOW',
-        'priority': 5,
-        'allocation_weight': 0.2
+        'liquidity': 'MEDIUM',
+        'priority': 4,
+        'allocation_weight': 0.4
+    },
+    'ICICIESGETF': {
+        'name': 'ICICI Prudential ESG ETF',
+        'category': ETFCategory.SPECIALTY,
+        'tracking': 'Nifty 100 ESG Sector Leaders',
+        'risk_level': ETFRiskLevel.MEDIUM,
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     
     # COMMODITY ETFs - Physical commodities
@@ -501,26 +511,6 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'liquidity': 'HIGH',
         'priority': 2,
         'allocation_weight': 0.8
-    },
-    
-    # SPECIALTY ETFs - Thematic and ESG
-    'ICICIESGETF': {
-        'name': 'ICICI Prudential ESG ETF',
-        'category': ETFCategory.SPECIALTY,
-        'tracking': 'Nifty 100 ESG Sector Leaders',
-        'risk_level': ETFRiskLevel.MEDIUM,
-        'liquidity': 'LOW',
-        'priority': 4,
-        'allocation_weight': 0.4
-    },
-    'CPSEETF': {
-        'name': 'Nippon India ETF CPSE',
-        'category': ETFCategory.SPECIALTY,
-        'tracking': 'Nifty CPSE Index',
-        'risk_level': ETFRiskLevel.HIGH,
-        'liquidity': 'MEDIUM',
-        'priority': 4,
-        'allocation_weight': 0.4
     },
     
     # ICICI SPECIALTY ETFs
@@ -575,8 +565,8 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'tracking': 'Nifty India Digital',
         'risk_level': ETFRiskLevel.HIGH,
         'liquidity': 'MEDIUM',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'priority': 3,
+        'allocation_weight': 0.6
     },
     'ICICIMANUF': {
         'name': 'ICICI Prudential Nifty India Manufacturing ETF',
@@ -584,8 +574,19 @@ ETF_UNIVERSE: Dict[str, Dict] = {
         'tracking': 'Nifty India Manufacturing',
         'risk_level': ETFRiskLevel.HIGH,
         'liquidity': 'MEDIUM',
-        'priority': 4,
-        'allocation_weight': 0.4
+        'priority': 3,
+        'allocation_weight': 0.6
+    },
+    
+    # SPECIALTY & CPSE ETFs
+    'CPSEETF': {
+        'name': 'Nippon India ETF CPSE',
+        'category': ETFCategory.SPECIALTY,
+        'tracking': 'Nifty CPSE Index',
+        'risk_level': ETFRiskLevel.HIGH,
+        'liquidity': 'MEDIUM',
+        'priority': 3,
+        'allocation_weight': 0.6
     }
 }
 
