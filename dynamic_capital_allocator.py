@@ -39,7 +39,7 @@ class ActiveTrade:
     allocated_amount: float
     entry_price: float
     entry_time: datetime
-    status: str = 'OPEN'  # 'OPEN', 'CLOSED'
+    status: str = "ACTIVE"
 
 class DynamicCapitalAllocator:
     """
@@ -59,7 +59,7 @@ class DynamicCapitalAllocator:
         
         Args:
             initial_capital: Starting capital (optional if using real balance)
-            use_real_balance: If True, uses real Breeze API account balance
+            use_real_balance: If True, uses real Kite API account balance
         """
         # Import here to avoid circular imports
         if use_real_balance:
@@ -67,7 +67,7 @@ class DynamicCapitalAllocator:
                 from real_account_balance import RealAccountBalanceManager
                 self.balance_manager = RealAccountBalanceManager()
                 self.use_real_balance = True
-                logger.info("🏦 Using REAL account balance from Breeze API")
+                logger.info("🏦 Using REAL account balance from Kite API")
             except ImportError:
                 logger.warning("⚠️ Real balance manager not available, using reference capital")
                 self.use_real_balance = False
@@ -76,30 +76,35 @@ class DynamicCapitalAllocator:
             self.use_real_balance = False
             self.balance_manager = None
         
-        # Initialize capital
+        # Initialize capital - ONLY real balance allowed
         if self.use_real_balance and self.balance_manager:
             self._initialize_with_real_balance()
         else:
-            self._initialize_with_reference_capital(initial_capital or 1000000)
+            logger.error("❌ Real balance is required - no fallback allowed")
+            raise ValueError("DynamicCapitalAllocator requires real account balance integration")
         
         # Step 3: Track Allocated Capital
         self.allocated_capital = 0.0
         self.free_capital = self.deployable_capital
+        self.available_deployment_capital = self.deployable_capital  # Initially all deployable capital is available
         self.active_trades: List[ActiveTrade] = []
         self.closed_trades: List[ActiveTrade] = []
         self.trade_history: List[Dict] = []
-        self.next_trade_id = 1
+        self.trade_counter = 0
         
         # Performance tracking
         self.total_profit_loss = 0.0
         self.winning_trades = 0
         self.losing_trades = 0
         
+        # Initial capital tracking
+        self.track_allocated_capital()
+        
         logger.info(f"💼 Capital Allocator initialized with ₹{self.total_capital:,.2f}")
         logger.info(f"🎯 Deployable: ₹{self.deployable_capital:,.2f}")
         logger.info(f"🛡️ Reserve: ₹{self.reserve_capital:,.2f}")
         logger.info(f"💰 Per Trade: ₹{self.per_trade_amount:,.2f}")
-    
+
     def refresh_real_balance(self) -> bool:
         """
         Refresh capital allocation based on current real account balance
@@ -128,6 +133,7 @@ class DynamicCapitalAllocator:
             # Update with new real balance
             self.total_capital = balance.free_cash
             self.deployable_capital = balance.deployable_capital
+            self.deployment_capital = self.deployable_capital  # Alias for compatibility
             self.reserve_capital = balance.reserve_capital
             self.per_trade_amount = balance.per_trade_capital
             
@@ -142,14 +148,14 @@ class DynamicCapitalAllocator:
             logger.info(f"✅ Capital allocation refreshed!")
             logger.info(f"💰 Total Capital: ₹{old_total:,.2f} → ₹{self.total_capital:,.2f} ({total_change:+,.2f})")
             logger.info(f"🎯 Deployable: ₹{old_deployable:,.2f} → ₹{self.deployable_capital:,.2f} ({deployable_change:+,.2f})")
-            logger.info(f"💸 Per Trade: ₹{old_per_trade:,.2f} → ₹{self.per_trade_amount:,.2f} ({per_trade_change:+,.2f})")
+            logger.info(f"💰 Per Trade: ₹{old_per_trade:,.2f} → ₹{self.per_trade_amount:,.2f} ({per_trade_change:+,.2f})")
             
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error refreshing real balance: {e}")
+            logger.error(f"❌ Failed to refresh real balance: {e}")
             return False
-    
+
     def get_real_balance_status(self) -> Dict:
         """Get current real balance status and comparison"""
         if not self.use_real_balance or not self.balance_manager:
@@ -177,16 +183,16 @@ class DynamicCapitalAllocator:
                     'free_capital': self.free_capital
                 },
                 'sync_status': {
-                    'is_synced': abs(balance.free_cash - self.total_capital) < 1.0,  # Within ₹1
-                    'difference': balance.free_cash - self.total_capital
+                    'is_synced': abs(self.total_capital - balance.free_cash) < 100,
+                    'difference': self.total_capital - balance.free_cash
                 }
             }
             
         except Exception as e:
-            return {'error': f'Status check failed: {e}'}
-    
+            return {'error': f'Failed to get balance status: {e}'}
+
     def _initialize_with_real_balance(self):
-        """Initialize using real Breeze API account balance"""
+        """Initialize using real Kite API account balance"""
         balance = self.balance_manager.get_current_balance(force_refresh=True)
         
         if balance and balance.free_cash > 0:
@@ -200,14 +206,15 @@ class DynamicCapitalAllocator:
             
             # Step 2: Calculate Capital Buckets with REAL amounts
             self.deployable_capital = balance.deployable_capital
+            self.deployment_capital = self.deployable_capital  # Alias for compatibility
             self.reserve_capital = balance.reserve_capital
             self.per_trade_amount = balance.per_trade_capital
             
             logger.info(f"✅ Real balance loaded: ₹{self.total_capital:,.2f} free cash")
         else:
-            logger.error("❌ Could not fetch real balance, falling back to reference")
-            self._initialize_with_reference_capital(1000000)
-    
+            logger.error("❌ Could not fetch real balance - NO FALLBACK ALLOWED")
+            raise ConnectionError("Real account balance required - fallback disabled per user request")
+
     def _initialize_with_reference_capital(self, initial_capital: float):
         """Initialize using reference capital amount"""
         # Step 1: Initialize Parameters
@@ -220,11 +227,12 @@ class DynamicCapitalAllocator:
         
         # Step 2: Calculate Capital Buckets
         self.deployable_capital = self.total_capital * (self.deployment_percentage / 100)
+        self.deployment_capital = self.deployable_capital  # Alias for compatibility
         self.reserve_capital = self.total_capital * (self.reserve_percentage / 100)
         self.per_trade_amount = self.deployable_capital * (self.per_trade_percentage / 100)
         
-        logger.info(f"� Reference capital mode: ₹{initial_capital:,.2f}")
-    
+        logger.info(f"📊 Reference capital mode: ₹{initial_capital:,.2f}")
+
     def calculate_capital_buckets(self):
         """
         Calculate Capital Buckets (Step 2)
@@ -232,13 +240,14 @@ class DynamicCapitalAllocator:
         - deployment_capital = total_capital × deployment_percentage
         - reserve_capital = total_capital × reserve_percentage
         """
-        self.deployment_capital = self.total_capital * self.deployment_percentage
-        self.reserve_capital = self.total_capital * self.reserve_percentage
+        self.deployment_capital = self.total_capital * (self.deployment_percentage / 100)
+        self.deployable_capital = self.deployment_capital  # Alias for compatibility
+        self.reserve_capital = self.total_capital * (self.reserve_percentage / 100)
         
         logger.info(f"📊 Capital buckets calculated: "
                    f"Deployment ₹{self.deployment_capital:,.0f} | "
                    f"Reserve ₹{self.reserve_capital:,.0f}")
-    
+
     def track_allocated_capital(self):
         """
         Track Allocated Capital (Step 3)
@@ -252,7 +261,7 @@ class DynamicCapitalAllocator:
         logger.debug(f"💼 Capital tracking: "
                     f"Allocated ₹{self.allocated_capital:,.0f} | "
                     f"Available ₹{self.available_deployment_capital:,.0f}")
-    
+
     def process_trade_signal(self, signal: TradeSignal) -> Dict:
         """
         For Each New Trade Signal (Step 4)
@@ -273,12 +282,11 @@ class DynamicCapitalAllocator:
             return {'status': 'SKIPPED', 'reason': 'Only BUY signals processed here'}
         
         # Step 4.1: Calculate per_trade_allocation
-        per_trade_allocation = self.deployment_capital * self.per_trade_percentage
+        per_trade_allocation = self.deployment_capital * (self.per_trade_percentage / 100)
         
         # Step 4.2: Check if available_deployment_capital ≥ per_trade_allocation
         if self.available_deployment_capital >= per_trade_allocation:
             # Step 4.3: If yes - Allocate and place trade
-            
             self.trade_counter += 1
             
             # Create new active trade
@@ -324,7 +332,7 @@ class DynamicCapitalAllocator:
             logger.warning(f"❌ {result['message']}")
         
         return result
-    
+
     def close_trade(self, trade_id: int, exit_price: float, reason: str = "Manual close") -> Dict:
         """
         When a Trade Closes (Step 5)
@@ -381,23 +389,20 @@ class DynamicCapitalAllocator:
             'status': 'CLOSED',
             'trade_id': trade_id,
             'symbol': trade_to_close.symbol,
+            'shares': shares,
             'entry_price': trade_to_close.entry_price,
             'exit_price': exit_price,
-            'shares': shares,
+            'gross_proceeds': gross_proceeds,
             'gross_pnl': gross_pnl,
             'brokerage': brokerage,
             'net_pnl': net_pnl,
-            'new_total_capital': self.total_capital,
-            'capital_released': trade_to_close.allocated_amount,
             'available_after': self.available_deployment_capital,
-            'reason': reason,
-            'message': f"Trade closed: ₹{net_pnl:,.2f} net P&L"
+            'message': f"Trade closed: ₹{net_pnl:,.2f} P&L"
         }
         
-        logger.info(f"💰 {result['message']} | New capital: ₹{self.total_capital:,.0f}")
-        
+        logger.info(f"🔄 {result['message']}")
         return result
-    
+
     def get_capital_status(self) -> Dict:
         """
         Get comprehensive capital allocation status
@@ -411,31 +416,32 @@ class DynamicCapitalAllocator:
         
         # Calculate metrics
         total_trades = len(self.active_trades) + len(self.closed_trades)
-        max_possible_trades = int(self.deployment_capital / (self.deployment_capital * self.per_trade_percentage))
+        max_possible_trades = int(self.deployment_capital / (self.deployment_capital * (self.per_trade_percentage / 100)))
         utilization_pct = (self.allocated_capital / self.deployment_capital) * 100 if self.deployment_capital > 0 else 0
         
         # Performance metrics
-        total_pnl = self.total_capital - getattr(self, 'initial_capital', self.total_capital)
+        total_pnl = sum(trade.get('net_pnl', 0) for trade in self.trade_history)
         
         return {
             # Capital buckets
             'total_capital': self.total_capital,
             'deployment_capital': self.deployment_capital,
+            'deployable_capital': self.deployable_capital,  # Alias
             'reserve_capital': self.reserve_capital,
             'allocated_capital': self.allocated_capital,
             'available_deployment_capital': self.available_deployment_capital,
             
             # Percentages
-            'deployment_percentage': self.deployment_percentage * 100,
-            'reserve_percentage': self.reserve_percentage * 100,
-            'per_trade_percentage': self.per_trade_percentage * 100,
+            'deployment_percentage': self.deployment_percentage,
+            'reserve_percentage': self.reserve_percentage,
+            'per_trade_percentage': self.per_trade_percentage,
             'utilization_percentage': utilization_pct,
             
             # Trading capacity
             'active_trades': len(self.active_trades),
             'max_possible_trades': max_possible_trades,
             'remaining_capacity': max_possible_trades - len(self.active_trades),
-            'per_trade_allocation': self.deployment_capital * self.per_trade_percentage,
+            'per_trade_allocation': self.deployment_capital * (self.per_trade_percentage / 100),
             
             # Performance
             'total_trades_executed': total_trades,
@@ -446,25 +452,7 @@ class DynamicCapitalAllocator:
             'reserve_untouched': True,  # Always true in this system
             'capital_buckets_valid': abs((self.deployment_capital + self.reserve_capital) - self.total_capital) < 0.01
         }
-    
-    def log_capital_status(self):
-        """Log current capital allocation status"""
-        status = self.get_capital_status()
-        
-        print(f"\\n📊 DYNAMIC CAPITAL ALLOCATION STATUS")
-        print("=" * 50)
-        print(f"💰 Total Capital:           ₹{status['total_capital']:,.0f}")
-        print(f"📈 Deployment ({status['deployment_percentage']:.0f}%):      ₹{status['deployment_capital']:,.0f}")
-        print(f"🛡️  Reserve ({status['reserve_percentage']:.0f}%):         ₹{status['reserve_capital']:,.0f}")
-        print(f"💼 Allocated:               ₹{status['allocated_capital']:,.0f}")
-        print(f"✅ Available:               ₹{status['available_deployment_capital']:,.0f}")
-        print(f"🎯 Per Trade:               ₹{status['per_trade_allocation']:,.0f}")
-        print(f"📊 Utilization:             {status['utilization_percentage']:.1f}%")
-        print(f"🔢 Active Trades:           {status['active_trades']}")
-        print(f"🏆 Max Capacity:            {status['max_possible_trades']} trades")
-        print(f"📈 Total P&L:               ₹{status['total_pnl']:,.2f}")
-        print()
-    
+
     def validate_reserve_protection(self) -> bool:
         """
         Always Maintain the Reserve (Step 6)
@@ -484,31 +472,52 @@ class DynamicCapitalAllocator:
         else:
             logger.error("❌ Reserve protection violated!")
             return False
-    
+
+    def log_capital_status(self):
+        """Log current capital allocation status"""
+        status = self.get_capital_status()
+        
+        print(f"\\n📊 DYNAMIC CAPITAL ALLOCATION STATUS")
+        print("=" * 50)
+        print(f"💰 Total Capital:           ₹{status['total_capital']:,.0f}")
+        print(f"📈 Deployment ({status['deployment_percentage']:.0f}%):      ₹{status['deployment_capital']:,.0f}")
+        print(f"🛡️  Reserve ({status['reserve_percentage']:.0f}%):         ₹{status['reserve_capital']:,.0f}")
+        print(f"💼 Allocated:               ₹{status['allocated_capital']:,.0f}")
+        print(f"✅ Available:               ₹{status['available_deployment_capital']:,.0f}")
+        print(f"🎯 Per Trade:               ₹{status['per_trade_allocation']:,.0f}")
+        print(f"📊 Utilization:             {status['utilization_percentage']:.1f}%")
+        print(f"🔢 Active Trades:           {status['active_trades']}")
+        print(f"🏆 Max Capacity:            {status['max_possible_trades']} trades")
+        print(f"📈 Total P&L:               ₹{status['total_pnl']:,.2f}")
+        print()
+
     def simulate_trading_session(self, signals: List[TradeSignal]) -> Dict:
         """
         Simulate a complete trading session with multiple signals
         
-        Demonstrates Steps 4-6 repeating for each signal
+        Args:
+            signals: List of trade signals to process
+            
+        Returns:
+            Dict with session summary and results
         """
+        
+        print(f"🎯 TRADING SESSION SIMULATION")
+        print(f"Processing {len(signals)} signals...")
+        print()
         
         results = {
             'signals_processed': 0,
             'trades_executed': 0,
             'trades_rejected': 0,
-            'execution_details': []
+            'session_pnl': 0.0
         }
         
-        print(f"\\n🚀 STARTING TRADING SESSION")
-        print(f"Processing {len(signals)} trade signals...")
-        print("=" * 60)
-        
         for i, signal in enumerate(signals, 1):
-            print(f"\\n📡 Signal {i}/{len(signals)}: {signal.signal_type} {signal.symbol} @ ₹{signal.price:.2f}")
+            print(f"Signal {i}: {signal.signal_type} {signal.symbol} @ ₹{signal.price}")
             
             # Process the signal (Step 4)
             result = self.process_trade_signal(signal)
-            results['execution_details'].append(result)
             results['signals_processed'] += 1
             
             if result['status'] == 'EXECUTED':
@@ -534,11 +543,11 @@ class DynamicCapitalAllocator:
         
         return results
 
+
 # Demo functions removed - integrated with live trading system
 
 if __name__ == "__main__":
     print("🎯 DYNAMIC CAPITAL ALLOCATOR - LIVE MODE")
     print("=" * 50)
-    print("Note: This component is integrated with live trading system.")
-    print("Use through main.py or trading dashboard for live operations.")
-    print("=" * 50)
+    print("This module is integrated with the live trading system.")
+    print("Use the trading dashboard to access all functionality.")

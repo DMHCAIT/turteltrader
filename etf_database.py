@@ -323,13 +323,45 @@ class IndianETFDatabase:
         """Get all Yahoo Finance symbols for data fetching"""
         return [etf.yahoo_symbol for etf in self.etfs.values() if etf.is_active]
     
-    def get_liquid_etfs(self) -> List[str]:
-        """Get most liquid ETFs for active trading"""
-        liquid_etfs = [
-            'NIFTYBEES', 'BANKBEES', 'ITBEES', 'GOLDBEES', 'LIQUIDBEES',
-            'UTISENSETF', 'PHARMABEES', 'FMCGBEES', 'SETFNIF100', 'ICICINXT50'
-        ]
-        return [symbol for symbol in liquid_etfs if symbol in self.etfs]
+    def get_liquid_etfs(self, liquidity_level: str = 'HIGH_MEDIUM') -> List[str]:
+        """Get ETFs filtered by liquidity level for active trading
+        
+        Args:
+            liquidity_level: 'HIGH', 'MEDIUM', 'LOW', 'HIGH_MEDIUM', or 'ALL' 
+        """
+        # Import our comprehensive universe
+        try:
+            from etf_universe_config import ETF_UNIVERSE
+            
+            if liquidity_level == 'ALL':
+                # Return all ETFs from our universe that exist in database
+                return [symbol for symbol in ETF_UNIVERSE.keys() if symbol in self.etfs]
+            elif liquidity_level == 'HIGH_MEDIUM':
+                # Default: Return high and medium liquidity ETFs (best for trading)
+                high_etfs = [
+                    symbol for symbol, config in ETF_UNIVERSE.items() 
+                    if config.get('liquidity') == 'HIGH' and symbol in self.etfs
+                ]
+                medium_etfs = [
+                    symbol for symbol, config in ETF_UNIVERSE.items() 
+                    if config.get('liquidity') == 'MEDIUM' and symbol in self.etfs
+                ]
+                return high_etfs + medium_etfs
+            else:
+                # Filter by specific liquidity level
+                filtered_etfs = [
+                    symbol for symbol, config in ETF_UNIVERSE.items() 
+                    if config.get('liquidity') == liquidity_level and symbol in self.etfs
+                ]
+                return filtered_etfs
+                
+        except ImportError:
+            # Fallback to original hardcoded list if config not available
+            liquid_etfs = [
+                'NIFTYBEES', 'BANKBEES', 'ITBEES', 'GOLDBEES', 'LIQUIDBEES',
+                'UTISENSETF', 'PHARMABEES', 'FMCGBEES', 'SETFNIF100', 'ICICINXT50'
+            ]
+            return [symbol for symbol in liquid_etfs if symbol in self.etfs]
     
     def get_sector_etfs(self) -> Dict[str, List[str]]:
         """Get ETFs organized by sectors"""
@@ -372,7 +404,10 @@ class IndianETFDatabase:
     def get_market_data_batch(self, symbols: List[str] = None) -> pd.DataFrame:
         """Get market data for multiple ETFs"""
         if symbols is None:
-            symbols = self.get_liquid_etfs()[:10]  # Top 10 liquid ETFs
+            # Get high and medium liquidity ETFs for better coverage
+            high_liquid = self.get_liquid_etfs('HIGH')
+            medium_liquid = self.get_liquid_etfs('MEDIUM')
+            symbols = high_liquid + medium_liquid
         
         yahoo_symbols = []
         etf_names = []
@@ -424,10 +459,21 @@ class IndianETFDatabase:
         for category, symbols in self.categories.items():
             print(f"{category.value}: {len(symbols)} ETFs")
             
-        print(f"\nTop Liquid ETFs for Trading:")
-        for symbol in self.get_liquid_etfs()[:10]:
-            etf = self.etfs[symbol]
-            print(f"  {symbol}: {etf.name}")
+        print(f"\nHigh Liquidity ETFs for Active Trading:")
+        high_liquid = self.get_liquid_etfs('HIGH')
+        for symbol in high_liquid:
+            if symbol in self.etfs:
+                etf = self.etfs[symbol]
+                print(f"  {symbol}: {etf.name}")
+        
+        print(f"\nMedium Liquidity ETFs (Total: {len(self.get_liquid_etfs('MEDIUM'))}):")
+        medium_liquid = self.get_liquid_etfs('MEDIUM')
+        for symbol in medium_liquid[:15]:  # Show first 15 medium liquidity ETFs
+            if symbol in self.etfs:
+                etf = self.etfs[symbol]
+                print(f"  {symbol}: {etf.name}")
+        if len(medium_liquid) > 15:
+            print(f"  ... and {len(medium_liquid) - 15} more medium liquidity ETFs")
         
         print(f"\nSector Distribution:")
         sectors = self.get_sector_etfs()

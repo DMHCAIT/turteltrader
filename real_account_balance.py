@@ -54,12 +54,13 @@ class RealAccountBalanceManager:
         logger.info("🏦 Real Account Balance Manager initialized")
     
     def fetch_real_account_balance(self) -> Optional[AccountBalance]:
-        """Fetch real account balance from Breeze API"""
+        """Fetch real account balance from Kite API"""
         try:
-            logger.info("📡 Fetching real account balance from Breeze API...")
+            logger.info("📡 Fetching real account balance from Kite API...")
             
-            # Get account funds from Kite API
-            funds_response = self.api_client.get_funds()
+            # Get account margins from Kite API (this contains balance info)
+            margins_response = self.api_client.get_margins()
+            funds_response = margins_response  # Use margins for funds data
             if not funds_response:
                 logger.error("❌ Failed to fetch account funds - Check API connection and credentials")
                 logger.error("💡 Possible issues: 1) Access token expired 2) API credentials missing 3) Network timeout")
@@ -79,10 +80,16 @@ class RealAccountBalanceManager:
                     except (ValueError, TypeError):
                         continue
             
-            # Extract balance information from Kite API response
-            available_cash = float(funds_response.get('cash', 0))
-            margin_used = float(funds_response.get('utilised', {}).get('debits', 0))
-            total_balance = float(funds_response.get('net', available_cash))
+            # Extract balance information from Kite API margins response
+            # Kite API margins response structure: {'equity': {...}, 'commodity': {...}}
+            equity_margins = funds_response.get('equity', {})
+            available_margins = equity_margins.get('available', {})
+            utilised_margins = equity_margins.get('utilised', {})
+            
+            # Use live_balance (actual available balance) instead of cash
+            available_cash = float(available_margins.get('live_balance', 0))
+            margin_used = float(utilised_margins.get('debits', 0))
+            total_balance = float(equity_margins.get('net', available_cash))
             
             # Calculate free cash (available for trading)
             free_cash = available_cash - margin_used

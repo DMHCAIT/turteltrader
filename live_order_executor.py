@@ -9,8 +9,7 @@ import streamlit as st
 from typing import Optional, Dict, Any
 from datetime import datetime
 import logging
-from smart_session_manager import PermanentBreezeClient
-from fixed_breeze_api_client import FixedBreezeAPIClient
+from kite_api_client import KiteAPIClient
 
 class LiveOrderExecutor:
     """Execute real orders through Breeze API"""
@@ -21,28 +20,20 @@ class LiveOrderExecutor:
         self.initialize_client()
     
     def initialize_client(self):
-        """Initialize live Breeze API client"""
+        """Initialize live Kite API client"""
         try:
-            # Use your session manager for permanent connection
-            permanent_client = PermanentBreezeClient()
+            # Initialize Kite API client
+            self.client = KiteAPIClient()
             
-            # Get connection or use fixed client as fallback
-            self.client = permanent_client.get_connection()
-            
-            if not self.client:
-                # Fallback to fixed client
-                self.client = FixedBreezeAPIClient()
-                if self.client.test_connection():
-                    self.is_live_mode = True
-                    st.success("✅ Live API Connected!")
-                else:
-                    st.error("❌ API Connection Failed")
-            else:
+            if self.client.test_connection():
                 self.is_live_mode = True
-                st.success("✅ Live API Connected via Smart Session!")
+                st.success("✅ Kite API Connected!")
+            else:
+                st.error("❌ Kite API Connection Failed - Check credentials and access token")
+                self.is_live_mode = False
                 
         except Exception as e:
-            st.error(f"❌ API initialization failed: {e}")
+            st.error(f"❌ Kite API initialization failed: {e}")
             self.is_live_mode = False
     
     def place_live_order(self, 

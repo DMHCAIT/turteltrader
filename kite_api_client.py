@@ -7,11 +7,13 @@ Supports real-time data, portfolio management, and order execution
 """
 
 import json
+import os
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import configparser
 from loguru import logger
+from dataclasses import dataclass
 
 try:
     from kiteconnect import KiteConnect
@@ -27,13 +29,25 @@ class KiteAPIClient:
         self.config = configparser.ConfigParser()
         self.config.read(config_path)
         
-        # Get API credentials from config
-        self.api_key = self.config.get('KITE_API', 'API_KEY', fallback='')
-        self.api_secret = self.config.get('KITE_API', 'API_SECRET', fallback='')
-        self.access_token = self.config.get('KITE_API', 'ACCESS_TOKEN', fallback='')
+        # Get API credentials from config, Streamlit secrets, or environment variables
+        try:
+            import streamlit as st
+            streamlit_secrets = st.secrets.get("KITE_API", {})
+        except:
+            streamlit_secrets = {}
+            
+        self.api_key = (self.config.get('KITE_API', 'api_key', fallback='') or 
+                       streamlit_secrets.get('api_key', '') or
+                       os.getenv('KITE_API_KEY', ''))
+        self.api_secret = (self.config.get('KITE_API', 'api_secret', fallback='') or 
+                          streamlit_secrets.get('api_secret', '') or
+                          os.getenv('KITE_API_SECRET', ''))
+        self.access_token = (self.config.get('KITE_API', 'access_token', fallback='') or 
+                            streamlit_secrets.get('access_token', '') or
+                            os.getenv('KITE_ACCESS_TOKEN', ''))
         
         if not self.api_key:
-            raise ValueError("❌ Kite API key not found in config.ini")
+            raise ValueError("❌ Kite API key not found in config.ini or environment variables. Please set KITE_API_KEY.")
         
         # Initialize Kite Connect
         self.kite = KiteConnect(api_key=self.api_key)
@@ -83,15 +97,24 @@ class KiteAPIClient:
             logger.error(f"❌ Failed to get profile: {e}")
             return None
     
-    def get_funds(self) -> Optional[Dict]:
-        """Get account funds"""
+    def get_funds(self):
+        """Get account funds and margins"""
         try:
             margins = self.kite.margins()
-            if margins:
-                return margins.get('equity', {})
-            return None
+            logger.info("✅ Account margins fetched successfully")
+            return margins
         except Exception as e:
-            logger.error(f"❌ Failed to get funds: {e}")
+            logger.error(f"❌ Failed to get account margins: {e}")
+            return None
+            
+    def get_margins(self, segment=None):
+        """Get account margins for specific segment or all segments"""
+        try:
+            margins = self.kite.margins(segment=segment)
+            logger.info(f"✅ Account margins fetched for segment: {segment or 'all'}")
+            return margins
+        except Exception as e:
+            logger.error(f"❌ Failed to get margins: {e}")
             return None
     
     def get_positions(self) -> Optional[Dict]:
@@ -102,12 +125,24 @@ class KiteAPIClient:
             logger.error(f"❌ Failed to get positions: {e}")
             return None
     
-    def get_holdings(self) -> Optional[List]:
+    def get_holdings(self):
         """Get portfolio holdings"""
         try:
-            return self.kite.holdings()
+            holdings = self.kite.holdings()
+            logger.info("✅ Portfolio holdings fetched successfully")
+            return holdings
         except Exception as e:
-            logger.error(f"❌ Failed to get holdings: {e}")
+            logger.error(f"❌ Failed to get portfolio holdings: {e}")
+            return None
+            
+    def get_positions(self):
+        """Get current positions"""
+        try:
+            positions = self.kite.positions()
+            logger.info("✅ Positions fetched successfully")
+            return positions
+        except Exception as e:
+            logger.error(f"❌ Failed to get positions: {e}")
             return None
     
     def get_quote(self, instruments: List[str]) -> Optional[Dict]:
@@ -226,6 +261,32 @@ def get_kite_client() -> KiteAPIClient:
     if kite_client is None:
         kite_client = KiteAPIClient()
     return kite_client
+
+# Data classes for compatibility with existing code
+@dataclass
+class Position:
+    """Position data structure for portfolio management"""
+    symbol: str
+    quantity: int
+    average_price: float
+    current_price: float
+    pnl: float
+    unrealized_pnl: float
+    product: str = ""
+    exchange: str = ""
+    
+@dataclass  
+class Order:
+    """Order data structure for trading operations"""
+    order_id: str
+    symbol: str
+    quantity: int
+    price: float
+    order_type: str
+    transaction_type: str
+    status: str
+    product: str = ""
+    exchange: str = ""
 
 # Export main class and function
 __all__ = ['KiteAPIClient', 'get_kite_client']
