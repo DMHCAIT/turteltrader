@@ -18,7 +18,7 @@ import schedule
 from dataclasses import dataclass
 
 from core.config import config, Constants, Utils
-from breeze_api_client import BreezeAPIClient  # Updated API client
+from kite_api_client import KiteAPIClient  # Kite Connect API client
 from etf_manager import ETFOrderManager
 from ai_predictor import AIPredictor
 from custom_strategy import CustomETFStrategy, custom_etf_strategy
@@ -51,7 +51,7 @@ class TradingEngine:
         self.notification_manager = NotificationManager()
         
         # Initialize API client
-        self.api_client = BreezeAPIClient()
+        self.api_client = KiteAPIClient()
         
         # Trading parameters from config
         self.symbols_to_trade = self._load_trading_universe()
@@ -79,13 +79,11 @@ class TradingEngine:
             return
         
         try:
-            # Authenticate with Breeze API
-            session_token = config.get("BREEZE_API", "SESSION_TOKEN")
-            if not session_token:
-                raise ValueError("Session token not configured")
-            
-            self.api_client.authenticate(session_token)
-            logger.info("Successfully authenticated with Breeze API")
+            # Test Kite API connection
+            if not self.api_client.test_connection():
+                logger.warning("⚠️ Kite API not authenticated - manual login required")
+            else:
+                logger.info("✅ Successfully connected to Kite API")
             
             # Initialize data manager
             self.data_manager.start()

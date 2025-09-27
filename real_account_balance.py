@@ -2,7 +2,7 @@
 🏦 REAL ACCOUNT BALANCE INTEGRATION
 ==================================
 
-Dynamic Capital Allocation based on ACTUAL Breeze API account balance
+Dynamic Capital Allocation based on ACTUAL Kite API account balance
 """
 
 import json
@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 from loguru import logger
-from breeze_api_client import BreezeAPIClient
+from kite_api_client import KiteAPIClient
 
 
 @dataclass
@@ -44,8 +44,8 @@ class RealAccountBalanceManager:
     """Manage real-time account balance and dynamic allocation"""
     
     def __init__(self, config_path: str = "config.ini"):
-        """Initialize with Breeze API client"""
-        self.api_client = BreezeAPIClient(config_path)
+        """Initialize with Kite API client"""
+        self.api_client = KiteAPIClient(config_path)
         self.last_balance_check = None
         self.current_balance = None
         self.balance_cache_duration = timedelta(minutes=5)  # Cache for 5 minutes
@@ -58,30 +58,31 @@ class RealAccountBalanceManager:
         try:
             logger.info("📡 Fetching real account balance from Breeze API...")
             
-            # Get account funds
-            funds_response = self.api_client.get_account_funds()
+            # Get account funds from Kite API
+            funds_response = self.api_client.get_funds()
             if not funds_response:
                 logger.error("❌ Failed to fetch account funds - Check API connection and credentials")
-                logger.error("💡 Possible issues: 1) Session token expired 2) API credentials missing 3) Network timeout")
+                logger.error("💡 Possible issues: 1) Access token expired 2) API credentials missing 3) Network timeout")
                 return None
             
-            # Get portfolio holdings
-            portfolio_response = self.api_client.get_portfolio()
+            # Get portfolio holdings from Kite API
+            portfolio_response = self.api_client.get_holdings()
             portfolio_value = 0.0
             
             if portfolio_response and isinstance(portfolio_response, list):
                 for holding in portfolio_response:
                     try:
-                        # Calculate portfolio value
-                        market_value = float(holding.get('market_value', 0))
-                        portfolio_value += market_value
+                        # Calculate portfolio value (quantity * last_price)
+                        quantity = float(holding.get('quantity', 0))
+                        last_price = float(holding.get('last_price', 0))
+                        portfolio_value += quantity * last_price
                     except (ValueError, TypeError):
                         continue
             
-            # Extract balance information
-            available_cash = float(funds_response.get('available_cash', 0))
-            margin_used = float(funds_response.get('margin_used', 0))
-            total_balance = float(funds_response.get('total_balance', available_cash))
+            # Extract balance information from Kite API response
+            available_cash = float(funds_response.get('cash', 0))
+            margin_used = float(funds_response.get('utilised', {}).get('debits', 0))
+            total_balance = float(funds_response.get('net', available_cash))
             
             # Calculate free cash (available for trading)
             free_cash = available_cash - margin_used
