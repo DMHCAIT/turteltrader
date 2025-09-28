@@ -911,10 +911,10 @@ class TradingDashboard:
 
                     # Get additional quote data for change calculation and volume
                     try:
-                        from kite_api_client import KiteAPIClient
-                        kite = KiteAPIClient()
+                        from kite_api_client import get_kite_client
+                        kite = get_kite_client()
                         instrument_key = f"NSE:{symbol}"
-                        quote_data = kite.get_quote([instrument_key])
+                        quote_data = kite.get_quote([instrument_key]) if hasattr(kite, 'get_quote') else None
                         
                         if quote_data and instrument_key in quote_data:
                             quote = quote_data[instrument_key]
@@ -1849,10 +1849,10 @@ class TradingDashboard:
                         if price > 0:
                             # Get additional data for change calculation
                             try:
-                                from kite_api_client import KiteAPIClient
-                                kite = KiteAPIClient()
+                                from kite_api_client import get_kite_client
+                                kite = get_kite_client()
                                 instrument_key = f"NSE:{symbol}"
-                                quote_data = kite.get_quote([instrument_key])
+                                quote_data = kite.get_quote([instrument_key]) if hasattr(kite, 'get_quote') else None
                                 
                                 if quote_data and instrument_key in quote_data:
                                     quote = quote_data[instrument_key]

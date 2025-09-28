@@ -50,8 +50,18 @@ class TradingEngine:
         self.portfolio_manager = PortfolioManager()
         self.notification_manager = NotificationManager()
         
-        # Initialize API client
-        self.api_client = KiteAPIClient()
+        # Initialize API client (lazy-loaded, won't fail if credentials missing)
+        try:
+            from kite_api_client import get_kite_client
+            self.api_client = get_kite_client()
+        except Exception as e:
+            logger.warning(f"API client not available: {e}")
+            # Create a mock API client for demo purposes
+            from unittest.mock import Mock
+            self.api_client = Mock()
+            self.api_client.test_connection.return_value = False
+            self.api_client.get_positions.return_value = []
+            self.api_client.get_holdings.return_value = []
         
         # Trading parameters from config
         self.symbols_to_trade = self._load_trading_universe()
@@ -70,7 +80,7 @@ class TradingEngine:
         self.data_thread = None
         self.risk_thread = None
         
-        logger.info("Trading Engine initialized with API client")
+        logger.info("Trading Engine initialized")
     
     def start(self):
         """Start the trading engine"""
