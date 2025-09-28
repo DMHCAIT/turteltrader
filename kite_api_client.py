@@ -1,292 +1,153 @@
 """
-🚀 KITE API CLIENT - ZERODHA INTEGRATION
-======================================
-
-Complete Kite Connect API integration for live trading
-Supports real-time data, portfolio management, and order execution
+KITE API CLIENT - PRODUCTION READY
+Clean Kite API client for real data only
 """
 
 import json
-import os
-import pandas as pd
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
-import configparser
-from loguru import logger
 from dataclasses import dataclass
+from kiteconnect import KiteConnect
+from core.config import get_config
+from loguru import logger
 
-try:
-    from kiteconnect import KiteConnect
-except ImportError:
-    logger.error("❌ kiteconnect library not found. Install with: pip install kiteconnect")
-    raise
-
-class KiteAPIClient:
-    """Kite Connect API Client for Zerodha integration"""
-    
-    def __init__(self, config_path: str = "config.ini"):
-        """Initialize Kite Connect client"""
-        self.config = configparser.ConfigParser()
-        self.config.read(config_path)
-        
-        # Get API credentials from config, Streamlit secrets, or environment variables
-        try:
-            import streamlit as st
-            streamlit_secrets = st.secrets.get("KITE_API", {})
-        except:
-            streamlit_secrets = {}
-            
-        self.api_key = (self.config.get('KITE_API', 'api_key', fallback='') or 
-                       streamlit_secrets.get('api_key', '') or
-                       os.getenv('KITE_API_KEY', ''))
-        self.api_secret = (self.config.get('KITE_API', 'api_secret', fallback='') or 
-                          streamlit_secrets.get('api_secret', '') or
-                          os.getenv('KITE_API_SECRET', ''))
-        self.access_token = (self.config.get('KITE_API', 'access_token', fallback='') or 
-                            streamlit_secrets.get('access_token', '') or
-                            os.getenv('KITE_ACCESS_TOKEN', ''))
-        
-        if not self.api_key:
-            raise ValueError("❌ Kite API key not found in config.ini or environment variables. Please set KITE_API_KEY.")
-        
-        # Initialize Kite Connect
-        self.kite = KiteConnect(api_key=self.api_key)
-        
-        if self.access_token:
-            self.kite.set_access_token(self.access_token)
-            logger.info("✅ Kite API client initialized with access token")
-        else:
-            logger.warning("⚠️ No access token found - authentication required")
-    
-    def generate_session(self, request_token: str) -> str:
-        """Generate session using request token"""
-        try:
-            data = self.kite.generate_session(request_token, api_secret=self.api_secret)
-            self.access_token = data["access_token"]
-            
-            # Update config with access token
-            self.config.set('KITE_API', 'ACCESS_TOKEN', self.access_token)
-            with open('config.ini', 'w') as f:
-                self.config.write(f)
-            
-            self.kite.set_access_token(self.access_token)
-            logger.info("✅ Kite session generated successfully")
-            return self.access_token
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to generate Kite session: {e}")
-            raise
-    
-    def test_connection(self) -> bool:
-        """Test API connection"""
-        try:
-            profile = self.kite.profile()
-            if profile and 'user_id' in profile:
-                logger.info(f"✅ Kite API connection successful - User: {profile['user_id']}")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"❌ Kite API connection failed: {e}")
-            return False
-    
-    def get_profile(self) -> Optional[Dict]:
-        """Get user profile"""
-        try:
-            return self.kite.profile()
-        except Exception as e:
-            logger.error(f"❌ Failed to get profile: {e}")
-            return None
-    
-    def get_funds(self):
-        """Get account funds and margins"""
-        try:
-            margins = self.kite.margins()
-            logger.info("✅ Account margins fetched successfully")
-            return margins
-        except Exception as e:
-            logger.error(f"❌ Failed to get account margins: {e}")
-            return None
-            
-    def get_margins(self, segment=None):
-        """Get account margins for specific segment or all segments"""
-        try:
-            margins = self.kite.margins(segment=segment)
-            logger.info(f"✅ Account margins fetched for segment: {segment or 'all'}")
-            return margins
-        except Exception as e:
-            logger.error(f"❌ Failed to get margins: {e}")
-            return None
-    
-    def get_positions(self) -> Optional[Dict]:
-        """Get current positions"""
-        try:
-            return self.kite.positions()
-        except Exception as e:
-            logger.error(f"❌ Failed to get positions: {e}")
-            return None
-    
-    def get_holdings(self):
-        """Get portfolio holdings"""
-        try:
-            holdings = self.kite.holdings()
-            logger.info("✅ Portfolio holdings fetched successfully")
-            return holdings
-        except Exception as e:
-            logger.error(f"❌ Failed to get portfolio holdings: {e}")
-            return None
-            
-    def get_positions(self):
-        """Get current positions"""
-        try:
-            positions = self.kite.positions()
-            logger.info("✅ Positions fetched successfully")
-            return positions
-        except Exception as e:
-            logger.error(f"❌ Failed to get positions: {e}")
-            return None
-    
-    def get_quote(self, instruments: List[str]) -> Optional[Dict]:
-        """Get live quotes for instruments"""
-        try:
-            return self.kite.quote(instruments)
-        except Exception as e:
-            logger.error(f"❌ Failed to get quote: {e}")
-            return None
-    
-    def get_ltp(self, instruments: List[str]) -> Optional[Dict]:
-        """Get Last Traded Price for instruments"""
-        try:
-            return self.kite.ltp(instruments)
-        except Exception as e:
-            logger.error(f"❌ Failed to get LTP: {e}")
-            return None
-    
-    def get_historical_data(self, instrument_token: int, from_date: datetime, 
-                           to_date: datetime, interval: str = "day") -> Optional[pd.DataFrame]:
-        """Get historical data"""
-        try:
-            data = self.kite.historical_data(
-                instrument_token=instrument_token,
-                from_date=from_date,
-                to_date=to_date,
-                interval=interval
-            )
-            
-            if data:
-                df = pd.DataFrame(data)
-                df['date'] = pd.to_datetime(df['date'])
-                df.set_index('date', inplace=True)
-                return df
-            return None
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to get historical data: {e}")
-            return None
-    
-    def get_instruments(self, exchange: str = "NSE") -> Optional[pd.DataFrame]:
-        """Get instruments list"""
-        try:
-            instruments = self.kite.instruments(exchange)
-            return pd.DataFrame(instruments)
-        except Exception as e:
-            logger.error(f"❌ Failed to get instruments: {e}")
-            return None
-    
-    def place_order(self, variety: str, exchange: str, tradingsymbol: str,
-                   transaction_type: str, quantity: int, product: str,
-                   order_type: str, price: float = 0, validity: str = "DAY") -> Optional[str]:
-        """Place an order"""
-        try:
-            order_id = self.kite.place_order(
-                variety=variety,
-                exchange=exchange,
-                tradingsymbol=tradingsymbol,
-                transaction_type=transaction_type,
-                quantity=quantity,
-                product=product,
-                order_type=order_type,
-                price=price,
-                validity=validity
-            )
-            
-            logger.info(f"✅ Order placed successfully - ID: {order_id}")
-            return order_id
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to place order: {e}")
-            return None
-    
-    def get_orders(self) -> Optional[List]:
-        """Get all orders"""
-        try:
-            return self.kite.orders()
-        except Exception as e:
-            logger.error(f"❌ Failed to get orders: {e}")
-            return None
-    
-    def get_order_history(self, order_id: str) -> Optional[List]:
-        """Get order history"""
-        try:
-            return self.kite.order_history(order_id)
-        except Exception as e:
-            logger.error(f"❌ Failed to get order history: {e}")
-            return None
-    
-    def cancel_order(self, variety: str, order_id: str) -> bool:
-        """Cancel an order"""
-        try:
-            self.kite.cancel_order(variety=variety, order_id=order_id)
-            logger.info(f"✅ Order cancelled - ID: {order_id}")
-            return True
-        except Exception as e:
-            logger.error(f"❌ Failed to cancel order: {e}")
-            return False
-    
-    def modify_order(self, variety: str, order_id: str, **kwargs) -> bool:
-        """Modify an order"""
-        try:
-            self.kite.modify_order(variety=variety, order_id=order_id, **kwargs)
-            logger.info(f"✅ Order modified - ID: {order_id}")
-            return True
-        except Exception as e:
-            logger.error(f"❌ Failed to modify order: {e}")
-            return False
-
-# Global instance
-kite_client = None
-
-def get_kite_client() -> KiteAPIClient:
-    """Get global Kite API client instance"""
-    global kite_client
-    if kite_client is None:
-        kite_client = KiteAPIClient()
-    return kite_client
-
-# Data classes for compatibility with existing code
 @dataclass
 class Position:
-    """Position data structure for portfolio management"""
     symbol: str
     quantity: int
     average_price: float
-    current_price: float
+    ltp: float
     pnl: float
-    unrealized_pnl: float
-    product: str = ""
-    exchange: str = ""
+    day_change: float
     
-@dataclass  
+@dataclass 
 class Order:
-    """Order data structure for trading operations"""
     order_id: str
     symbol: str
+    transaction_type: str
     quantity: int
     price: float
-    order_type: str
-    transaction_type: str
     status: str
-    product: str = ""
-    exchange: str = ""
+    timestamp: datetime
 
-# Export main class and function
-__all__ = ['KiteAPIClient', 'get_kite_client']
+class KiteAPIClient:
+    """Production Kite API Client - Real data only"""
+    
+    def __init__(self, api_key: str = None, access_token: str = None):
+        config = get_config()
+        
+        self.api_key = api_key or config.get('KITE_API', 'api_key')
+        self.access_token = access_token or config.get('KITE_API', 'access_token')
+        
+        if not self.api_key or not self.access_token:
+            raise ValueError("Kite API credentials required")
+        
+        self.kite = KiteConnect(api_key=self.api_key)
+        self.kite.set_access_token(self.access_token)
+        
+        logger.info("Kite API client initialized")
+    
+    def test_connection(self) -> bool:
+        try:
+            profile = self.kite.profile()
+            if profile and 'user_id' in profile:
+                logger.info(f"Kite API connection successful - User: {profile['user_id']}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Kite API connection failed: {e}")
+            return False
+    
+    def get_funds(self) -> Optional[Dict[str, Any]]:
+        try:
+            margins = self.kite.margins()
+            if margins and 'equity' in margins:
+                logger.info("Account margins fetched successfully")
+                return margins
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get margins: {e}")
+            return None
+    
+    def get_ltp(self, symbols: List[str]) -> Dict[str, float]:
+        try:
+            formatted_symbols = [f"NSE:{symbol}" for symbol in symbols]
+            ltp_data = self.kite.ltp(formatted_symbols)
+            
+            result = {}
+            for symbol in symbols:
+                nse_symbol = f"NSE:{symbol}"
+                if nse_symbol in ltp_data and 'last_price' in ltp_data[nse_symbol]:
+                    result[symbol] = ltp_data[nse_symbol]['last_price']
+                else:
+                    logger.warning(f"No LTP data for {symbol}")
+            
+            return result
+        except Exception as e:
+            logger.error(f"Failed to get LTP: {e}")
+            return {}
+    
+    def get_positions(self) -> List[Position]:
+        try:
+            positions_data = self.kite.positions()
+            logger.info("Positions fetched successfully")
+            
+            positions = []
+            if positions_data and 'day' in positions_data:
+                for pos in positions_data['day']:
+                    if pos['quantity'] != 0:
+                        positions.append(Position(
+                            symbol=pos['tradingsymbol'],
+                            quantity=pos['quantity'],
+                            average_price=pos['average_price'],
+                            ltp=pos['last_price'],
+                            pnl=pos['pnl'],
+                            day_change=pos['day_change']
+                        ))
+            
+            return positions
+        except Exception as e:
+            logger.error(f"Failed to get positions: {e}")
+            return []
+    
+    def get_quote(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+        try:
+            formatted_symbols = [f"NSE:{symbol}" for symbol in symbols]
+            quote_data = self.kite.quote(formatted_symbols)
+            
+            result = {}
+            for symbol in symbols:
+                nse_symbol = f"NSE:{symbol}"
+                if nse_symbol in quote_data:
+                    result[symbol] = quote_data[nse_symbol]
+                else:
+                    logger.warning(f"No quote data for {symbol}")
+            
+            return result
+        except Exception as e:
+            logger.error(f"Failed to get quotes: {e}")
+            return {}
+
+# Global client instance
+_kite_client = None
+
+def get_kite_client() -> KiteAPIClient:
+    global _kite_client
+    
+    if _kite_client is None:
+        try:
+            _kite_client = KiteAPIClient()
+        except Exception as e:
+            logger.error(f"Failed to initialize Kite client: {e}")
+            raise
+    
+    return _kite_client
+
+def test_kite_connection() -> bool:
+    try:
+        client = get_kite_client()
+        return client.test_connection()
+    except Exception as e:
+        logger.error(f"Kite connection test failed: {e}")
+        return False

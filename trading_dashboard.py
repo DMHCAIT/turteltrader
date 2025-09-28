@@ -27,7 +27,7 @@ from kite_api_client import KiteAPIClient
 from core.api_client import get_kite_client
 from dynamic_capital_allocator import DynamicCapitalAllocator
 from real_time_monitor import RealTimeAccountMonitor, setup_default_monitoring
-import yfinance as yf
+from access_token_manager import access_token_manager
 from loguru import logger
 
 class TradingDashboard:
@@ -556,7 +556,7 @@ class TradingDashboard:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch", key="capital_allocation_chart")
     
     def render_position_management(self):
         """Render position management panel"""
@@ -580,7 +580,7 @@ class TradingDashboard:
                 })
             
             df_positions = pd.DataFrame(positions_data)
-            st.dataframe(df_positions, use_container_width=True)
+            st.dataframe(df_positions, width="stretch")
             
             # Position allocation chart
             self.render_position_allocation_chart()
@@ -618,7 +618,7 @@ class TradingDashboard:
             height=300
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch", key="position_allocation_chart")
     
     def render_trading_capacity(self):
         """Render trading capacity analysis"""
@@ -665,7 +665,7 @@ class TradingDashboard:
             ))
             
             fig.update_layout(height=300)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch", key="capacity_utilization_chart")
     
     def render_performance_metrics(self):
         """Render performance analysis"""
@@ -785,7 +785,7 @@ class TradingDashboard:
         )
         
         fig.update_layout(height=600, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch", key="performance_charts")
     
     def render_trade_execution_panel(self):
         """Render trade execution and monitoring panel"""
@@ -873,77 +873,187 @@ class TradingDashboard:
         
         # Get ETFs based on selection
         if selected_category == 'All':
-            symbols = list(etf_db.etfs.keys())[:max_etfs]
+            all_symbols = list(etf_db.etfs.keys())
+            symbols = all_symbols[:max_etfs] if len(all_symbols) >= max_etfs else all_symbols
         elif selected_category == 'Liquid ETFs':
-            symbols = self.liquid_etfs[:max_etfs]
+            # Get all available liquid ETFs, not limited to a hardcoded list
+            all_liquid = etf_db.get_liquid_etfs()
+            symbols = all_liquid[:max_etfs] if len(all_liquid) >= max_etfs else all_liquid
         else:
             category = next(cat for cat in ETFCategory if cat.value == selected_category)
-            symbols = [etf.symbol for etf in etf_db.get_etfs_by_category(category)][:max_etfs]
+            category_symbols = [etf.symbol for etf in etf_db.get_etfs_by_category(category)]
+            symbols = category_symbols[:max_etfs] if len(category_symbols) >= max_etfs else category_symbols
+        
+        # Debug info
+        st.info(f"📋 Selected {len(symbols)} ETFs from category '{selected_category}' (requested: {max_etfs})")
         
         try:
-            # Get market data using ETF database
-            market_df = etf_db.get_market_data_batch(symbols)
+            # Get LTP data using Kite API
+            from data_manager import DataManager
+            data_manager = DataManager()
             
-            if not market_df.empty:
-                # Format the dataframe for better display
-                market_df['Price'] = market_df['Price'].apply(lambda x: f"₹{x:.2f}")
-                market_df['Change %'] = market_df['Change %'].apply(lambda x: f"{x:+.2f}%")
-                market_df['Volume'] = market_df['Volume'].apply(lambda x: f"{x:,.0f}")
+            # Fetch LTP for selected symbols
+            with st.spinner("Fetching real-time LTP data..."):
+                ltp_data = data_manager.get_all_ltps(symbols)
+            
+            if ltp_data:
+                # Create enhanced market data DataFrame with LTP
+                market_data = []
                 
-                # Display the dataframe
-                st.dataframe(market_df, use_container_width=True)
+                for symbol in symbols:
+                    etf_info = etf_db.etfs.get(symbol, None)
+                    ltp = ltp_data.get(symbol, 0)
+                    
+                    change = 0
+                    change_pct = 0
+                    volume = 0
+                    status = "⚪ Flat"
+
+                    # Get additional quote data for change calculation and volume
+                    try:
+                        from kite_api_client import KiteAPIClient
+                        kite = KiteAPIClient()
+                        instrument_key = f"NSE:{symbol}"
+                        quote_data = kite.get_quote([instrument_key])
+                        
+                        if quote_data and instrument_key in quote_data:
+                            quote = quote_data[instrument_key]
+                            ohlc = quote.get('ohlc', {})
+                            prev_close = float(ohlc.get('close', ltp)) if ltp > 0 else 0
+                            change = ltp - prev_close if prev_close > 0 and ltp > 0 else 0
+                            change_pct = (change / prev_close * 100) if prev_close > 0 else 0
+                            
+                            # Try multiple fields for volume
+                            volume = quote.get('volume', 0)
+                            if volume == 0:
+                                volume = quote.get('day_volume', 0)
+                            if volume == 0:
+                                volume = quote.get('total_volume', 0)
+                        else:
+                            change = 0
+                            change_pct = 0
+                            volume = 0
+                    except Exception as e:
+                        logger.warning(f"Failed to get quote data for {symbol}: {e}")
+                        # Keep default values on error
+                        pass
+                    
+                    if ltp > 0:
+                        
+                        # Status indicator
+                        if change_pct > 0.5:
+                            status = "🟢 Strong Up"
+                        elif change_pct > 0:
+                            status = "🟢 Up"
+                        elif change_pct < -0.5:
+                            status = "🔴 Strong Down"
+                        elif change_pct < 0:
+                            status = "🔴 Down"
+
+                    # Handle ETF info safely
+                    if etf_info:
+                        etf_name = etf_info.name
+                        etf_category = etf_info.category.value if hasattr(etf_info.category, 'value') else str(etf_info.category)
+                        priority = etf_info.priority
+                    else:
+                        etf_name = symbol
+                        etf_category = 'Unknown'
+                        priority = 5
+                    
+                    # Truncate name if too long
+                    display_name = etf_name[:30] + '...' if len(etf_name) > 30 else etf_name
+                    
+                    market_data.append({
+                        'Symbol': symbol,
+                        'Name': display_name,
+                        'LTP': f"₹{ltp:.2f}" if ltp > 0 else "N/A",
+                        'Change': f"₹{change:+.2f}" if ltp > 0 else "N/A",
+                        'Change %': f"{change_pct:+.2f}%" if ltp > 0 else "N/A",
+                        'Volume': f"{volume:,.0f}" if volume > 0 else "N/A",
+                        'Status': status,
+                        'Category': etf_category,
+                        'Priority': priority
+                    })
                 
-                # Quick stats
-                col1, col2, col3, col4 = st.columns(4)
+                if market_data:
+                    # Convert to DataFrame and sort by priority
+                    market_df = pd.DataFrame(market_data)
+                    market_df = market_df.sort_values(['Priority', 'Symbol'])
+                    
+                    # Display the dataframe with LTP
+                    st.dataframe(
+                        market_df[['Symbol', 'Name', 'LTP', 'Change', 'Change %', 'Volume', 'Status', 'Category']], 
+                        width="stretch"
+                    )
+                    
+                    # Enhanced stats
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        gainers = len([d for d in market_data if 'Up' in d['Status']])
+                        st.metric("📈 Gainers", gainers)
+                    
+                    with col2:
+                        losers = len([d for d in market_data if 'Down' in d['Status']])
+                        st.metric("📉 Losers", losers)
+                    
+                    with col3:
+                        valid_ltps = [float(d['LTP'].replace('₹', '').replace(',', '')) for d in market_data if d['LTP'] != "N/A"]
+                        avg_ltp = sum(valid_ltps) / len(valid_ltps) if valid_ltps else 0
+                        st.metric("💰 Avg LTP", f"₹{avg_ltp:.2f}")
+                    
+                    with col4:
+                        active_ltps = len(valid_ltps)
+                        st.metric("📊 Live ETFs", f"{active_ltps}/{len(symbols)}")
+                    
+                    # Real-time update indicator
+                    st.caption(f"🕐 Last updated: {datetime.now().strftime('%H:%M:%S')}")
                 
-                with col1:
-                    gainers = len([row for _, row in market_df.iterrows() if '🟢' in str(row['Status'])])
-                    st.metric("Gainers", gainers)
-                
-                with col2:
-                    losers = len([row for _, row in market_df.iterrows() if '🔴' in str(row['Status'])])
-                    st.metric("Losers", losers)
-                
-                with col3:
-                    st.metric("ETFs Tracked", len(market_df))
-                
-                with col4:
-                    st.metric("Categories", len(set(market_df['Category'])))
+                else:
+                    st.warning("No LTP data received for selected ETFs")
             
             else:
-                st.warning("No market data available for selected ETFs")
+                st.warning("No market data available - Kite API may be unavailable")
+                
+                # Fallback: Try ETF database method
+                market_df = etf_db.get_market_data_batch(symbols)
+                
+                if not market_df.empty:
+                    st.info("📊 Showing ETF database reference data:")
+                    # Format the dataframe for better display
+                    market_df['Price'] = market_df['Price'].apply(lambda x: f"₹{x:.2f}")
+                    market_df['Change %'] = market_df['Change %'].apply(lambda x: f"{x:+.2f}%")
+                    market_df['Volume'] = market_df['Volume'].apply(lambda x: f"{x:,.0f}")
+                    
+                    # Display the dataframe
+                    st.dataframe(market_df, width="stretch")
         
         except Exception as e:
-            st.error(f"Error fetching market data: {e}")
+            st.error(f"❌ Error fetching LTP data: {e}")
+            st.info("💡 Make sure Kite API is properly configured and connected")
             
+        # Live Ticker Data
+        self.render_live_ticker()
+        
         # ETF Sector Overview
         self.render_etf_sector_overview()
     
     def render_backtesting_page(self):
-        """Render comprehensive backtesting page"""
-        st.header("🧪 Strategy Backtesting & Paper Trading")
-        st.markdown("Test your turtle trading strategy with historical data and paper trading simulation")
+        """Render the backtesting page with quick backtest and results analysis"""
+        st.header("📊 Backtesting Engine")
         
-        # Main tabs for different backtesting features
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📊 Quick Backtest", 
-            "🔬 Advanced Testing", 
-            "📈 Paper Trading", 
-            "📋 Results Analysis"
-        ])
+        # Backtesting tabs
+        backtest_tab1, backtest_tab2 = st.tabs(["🚀 Quick Backtest", "📈 Results Analysis"])
         
-        with tab1:
+        with backtest_tab1:
             self.render_quick_backtest()
-        
-        with tab2:
-            self.render_advanced_backtest()
-        
-        with tab3:
-            self.render_paper_trading()
-        
-        with tab4:
+            
+            if 'quick_backtest_results' in st.session_state:
+                self.display_quick_backtest_results()
+
+        with backtest_tab2:
             self.render_backtest_results()
-    
+
     def render_quick_backtest(self):
         """Quick backtest interface for rapid strategy testing"""
         st.subheader("⚡ Quick Strategy Test")
@@ -963,11 +1073,19 @@ class TradingDashboard:
             )
             
             # Time period
-            test_period = st.selectbox(
-                "Test Period",
-                options=['1 Month', '3 Months', '6 Months', '1 Year', '2 Years'],
-                index=2,  # Default to 6 months
-                help="Historical period for backtesting"
+            st.markdown("### 🗓️ Test Period")
+            today = datetime.now()
+            start_date = st.date_input(
+                "Start Date",
+                value=today - timedelta(days=180),
+                max_value=today - timedelta(days=1),
+                help="Start of the backtesting period"
+            )
+            end_date = st.date_input(
+                "End Date",
+                value=today,
+                max_value=today,
+                help="End of the backtesting period"
             )
             
             # Strategy parameters
@@ -1014,11 +1132,11 @@ class TradingDashboard:
                     st.session_state.quick_backtest_results = {}
                 
                 try:
-                    # Convert period to days
-                    period_days = {
-                        '1 Month': 30, '3 Months': 90, '6 Months': 180, 
-                        '1 Year': 365, '2 Years': 730
-                    }[test_period]
+                    # Calculate period in days
+                    if start_date > end_date:
+                        st.error("Error: Start date must be before end date.")
+                        return
+                    period_days = (end_date - start_date).days
                     
                     results = {}
                     total_etfs = len(selected_etfs)
@@ -1029,7 +1147,7 @@ class TradingDashboard:
                         
                         # Simulate backtest results (replace with actual backtesting logic)
                         result = self.run_quick_backtest_simulation(
-                            symbol, period_days, test_capital, 
+                            symbol, start_date, end_date, test_capital, 
                             entry_threshold, profit_target, max_positions
                         )
                         results[symbol] = result
@@ -1039,7 +1157,8 @@ class TradingDashboard:
                         'results': results,
                         'parameters': {
                             'etfs': selected_etfs,
-                            'period': test_period,
+                            'start_date': start_date.strftime('%Y-%m-%d'),
+                            'end_date': end_date.strftime('%Y-%m-%d'),
                             'entry_threshold': entry_threshold,
                             'profit_target': profit_target,
                             'max_positions': max_positions,
@@ -1058,39 +1177,130 @@ class TradingDashboard:
             if 'quick_backtest_results' in st.session_state:
                 self.display_quick_backtest_results()
     
-    def run_quick_backtest_simulation(self, symbol: str, days: int, capital: float, 
+    def run_quick_backtest_simulation(self, symbol: str, start_date: datetime, end_date: datetime, capital: float, 
                                     entry_threshold: float, profit_target: float, max_positions: int) -> dict:
-        """Simulate a quick backtest (replace with real backtesting logic)"""
-        # This is a simplified simulation - replace with actual turtle strategy logic
+        """Run real backtest using historical data from Kite API"""
         
-        # Simulate some basic metrics
-        import random
-        random.seed(42)  # For consistent results
+        days = (end_date - start_date).days
         
-        total_trades = random.randint(10, 50)
-        win_rate = random.uniform(0.4, 0.7)
-        winning_trades = int(total_trades * win_rate)
-        losing_trades = total_trades - winning_trades
-        
-        # Simulate returns
-        avg_win = random.uniform(profit_target * 0.8, profit_target * 1.2)
-        avg_loss = random.uniform(-2.0, -0.5)
-        
-        total_return = (winning_trades * avg_win + losing_trades * avg_loss)
-        total_return_pct = total_return / 100  # Convert to percentage
-        
+        try:
+            # Import full backtester
+            from turtle_backtest import TurtleBacktester
+            
+            # Initialize backtester
+            backtester = TurtleBacktester()
+            
+            logger.info(f"🐢 Running real backtest for {symbol} from {start_date.date()} to {end_date.date()}")
+            
+            # Run backtest on historical data
+            backtest_data = backtester.backtest_symbol(symbol, start_date, end_date)
+            
+            if backtest_data.empty:
+                logger.warning(f"⚠️ No backtest data for {symbol}")
+                return {
+                    'symbol': symbol, 'total_trades': 0, 'winning_trades': 0, 'losing_trades': 0,
+                    'win_rate': 0, 'total_return_pct': 0, 'avg_win_pct': 0, 'avg_loss_pct': 0,
+                    'profit_factor': 0, 'max_drawdown': 0, 'sharpe_ratio': 0,
+                    'start_date': start_date.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d'),
+                    'is_real_data': False, 'error': 'No historical data'
+                }
+
+            # Calculate real performance metrics
+            if len(backtester.trades) == 0:
+                logger.warning(f"⚠️ No trades generated for {symbol}")
+                return {
+                    'symbol': symbol, 'total_trades': 0, 'winning_trades': 0, 'losing_trades': 0,
+                    'win_rate': 0, 'total_return_pct': 0, 'avg_win_pct': 0, 'avg_loss_pct': 0,
+                    'profit_factor': 0, 'max_drawdown': 0, 'sharpe_ratio': 0,
+                    'start_date': start_date.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d'),
+                    'is_real_data': True, 'error': 'No trades generated'
+                }
+
+            # Calculate metrics from actual trades
+            total_trades = len(backtester.trades)
+            winning_trades = len([t for t in backtester.trades if t.pnl > 0])
+            losing_trades = total_trades - winning_trades
+            
+            win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+            
+            # Calculate returns
+            total_pnl = sum([t.pnl for t in backtester.trades])
+            total_return_pct = (total_pnl / capital * 100) if capital > 0 else 0
+            
+            # Calculate average win/loss
+            winning_pnl = [t.pnl_pct for t in backtester.trades if t.pnl > 0]
+            losing_pnl = [t.pnl_pct for t in backtester.trades if t.pnl < 0]
+            
+            avg_win_pct = np.mean(winning_pnl) if winning_pnl else 0
+            avg_loss_pct = np.mean(losing_pnl) if losing_pnl else 0
+            
+            # Calculate profit factor
+            gross_profit = sum([t.pnl for t in backtester.trades if t.pnl > 0])
+            gross_loss = abs(sum([t.pnl for t in backtester.trades if t.pnl < 0]))
+            profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else float('inf')
+            
+            # Calculate max drawdown from equity curve
+            if backtester.equity_curve:
+                equity_series = pd.Series(backtester.equity_curve)
+                rolling_max = equity_series.expanding().max()
+                drawdown = (equity_series - rolling_max) / rolling_max * 100
+                max_drawdown = drawdown.min()
+            else:
+                max_drawdown = 0
+            
+            # Calculate Sharpe ratio from daily returns
+            if backtester.daily_returns and len(backtester.daily_returns) > 1:
+                returns_series = pd.Series(backtester.daily_returns)
+                sharpe_ratio = (returns_series.mean() / returns_series.std() * np.sqrt(252)) if returns_series.std() > 0 else 0
+            else:
+                sharpe_ratio = 0
+            
+            logger.info(f"✅ Real backtest completed: {total_trades} trades, {win_rate:.1f}% win rate, {total_return_pct:.2f}% return")
+            
+            return {
+                'symbol': symbol,
+                'total_trades': total_trades,
+                'winning_trades': winning_trades,
+                'losing_trades': losing_trades,
+                'win_rate': win_rate,
+                'total_return_pct': total_return_pct,
+                'avg_win_pct': avg_win_pct,
+                'avg_loss_pct': avg_loss_pct,
+                'profit_factor': profit_factor,
+                'max_drawdown': max_drawdown,
+                'sharpe_ratio': sharpe_ratio,
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': end_date.strftime('%Y-%m-%d'),
+                'is_real_data': True
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Real backtest failed for {symbol}: {e}")
+            return {
+                'symbol': symbol, 'total_trades': 0, 'winning_trades': 0, 'losing_trades': 0,
+                'win_rate': 0, 'total_return_pct': 0, 'avg_win_pct': 0, 'avg_loss_pct': 0,
+                'profit_factor': 0, 'max_drawdown': 0, 'sharpe_ratio': 0,
+                'start_date': start_date.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d'),
+                'is_real_data': False, 'error': str(e)
+            }
+    
+    def _fallback_backtest_results(self, symbol: str, start_date: datetime, end_date: datetime, capital: float, 
+                                  entry_threshold: float, profit_target: float) -> dict:
+        """Fallback simulation when real data is unavailable"""
         return {
             'symbol': symbol,
-            'total_trades': total_trades,
-            'winning_trades': winning_trades,
-            'losing_trades': losing_trades,
-            'win_rate': win_rate * 100,
-            'total_return_pct': total_return_pct * 100,
-            'avg_win_pct': avg_win,
-            'avg_loss_pct': avg_loss,
-            'profit_factor': abs(avg_win * winning_trades / (avg_loss * losing_trades)) if losing_trades > 0 else float('inf'),
-            'max_drawdown': random.uniform(-5, -15),
-            'sharpe_ratio': random.uniform(0.5, 2.0)
+            'total_trades': 0,
+            'winning_trades': 0,
+            'losing_trades': 0,
+            'win_rate': 0,
+            'total_return_pct': 0,
+            'avg_win_pct': 0,
+            'avg_loss_pct': 0,
+            'profit_factor': 0,
+            'max_drawdown': 0,
+            'sharpe_ratio': 0,
+            'is_real_data': False,
+            'error': 'No data available'
         }
     
     def display_quick_backtest_results(self):
@@ -1100,6 +1310,18 @@ class TradingDashboard:
         params = results_data['parameters']
         
         st.markdown("### 📊 Quick Test Results")
+        
+        # Data source indicator
+        real_data_count = sum(1 for r in results.values() if r.get('is_real_data', False))
+        total_count = len(results)
+        
+        if real_data_count > 0:
+            if real_data_count == total_count:
+                st.success(f"✅ **Real Historical Data** - All {total_count} ETFs backtested using authentic Zerodha market data")
+            else:
+                st.warning(f"⚠️ **Mixed Data Sources** - {real_data_count}/{total_count} ETFs using real data, {total_count-real_data_count} using simulation")
+        else:
+            st.info("ℹ️ **Simulated Data** - Results based on statistical simulation (enable Kite API for real historical data)")
         
         # Summary metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -1122,6 +1344,7 @@ class TradingDashboard:
         results_df = pd.DataFrame([
             {
                 'ETF': r['symbol'],
+                'Data Source': "🔗 Real" if r.get('is_real_data', False) else "🔄 Sim",
                 'Trades': r['total_trades'],
                 'Win Rate': f"{r['win_rate']:.1f}%",
                 'Total Return': f"{r['total_return_pct']:+.2f}%",
@@ -1134,7 +1357,7 @@ class TradingDashboard:
             for r in results.values()
         ])
         
-        st.dataframe(results_df, use_container_width=True)
+        st.dataframe(results_df, width="stretch")
         
         # Performance chart
         fig = go.Figure()
@@ -1152,7 +1375,53 @@ class TradingDashboard:
             height=400
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch", key="strategy_performance_comparison")
+        
+        # Candlestick chart
+        st.markdown("### 🕯️ Candlestick Chart")
+        if 'quick_backtest_results' in st.session_state:
+            results_data = st.session_state.quick_backtest_results
+            params = results_data['parameters']
+            
+            symbol_to_chart = st.selectbox(
+                "Select ETF for Chart",
+                options=params['etfs']
+            )
+            
+            if symbol_to_chart:
+                chart_start_date = datetime.strptime(params['start_date'], '%Y-%m-%d')
+                chart_end_date = datetime.strptime(params['end_date'], '%Y-%m-%d')
+                self.render_backtest_candlestick(symbol_to_chart, chart_start_date, chart_end_date)
+    
+    def render_backtest_candlestick(self, symbol: str, start_date: datetime, end_date: datetime):
+        """Render candlestick chart for a backtested symbol."""
+        try:
+            from turtle_backtest import TurtleBacktester
+            backtester = TurtleBacktester()
+            
+            # Fetch the same historical data used in the backtest
+            data = backtester.backtest_symbol(symbol, start_date, end_date)
+            
+            if data.empty:
+                st.warning(f"No historical data found for {symbol} in the selected date range.")
+                return
+
+            fig = go.Figure(data=[go.Candlestick(x=data.index,
+                            open=data['open'],
+                            high=data['high'],
+                            low=data['low'],
+                            close=data['close'])])
+
+            fig.update_layout(
+                title=f'Candlestick Chart for {symbol}',
+                xaxis_title='Date',
+                yaxis_title='Price (₹)',
+                xaxis_rangeslider_visible=False
+            )
+            st.plotly_chart(fig, width="stretch", key="candlestick_chart")
+
+        except Exception as e:
+            st.error(f"Error rendering candlestick chart: {e}")
     
     def render_advanced_backtest(self):
         """Advanced backtesting with detailed parameter tuning"""
@@ -1261,7 +1530,7 @@ class TradingDashboard:
                         height=400
                     )
                     
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                 
                 with analysis_tab2:
                     st.markdown("#### Risk Analysis")
@@ -1303,7 +1572,7 @@ class TradingDashboard:
                             height=300
                         )
                         
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width="stretch")
                 
                 with analysis_tab3:
                     st.markdown("#### Monte Carlo Simulation")
@@ -1336,7 +1605,7 @@ class TradingDashboard:
                         height=400
                     )
                     
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                     
                     # Summary statistics
                     mc_col1, mc_col2, mc_col3 = st.columns(3)
@@ -1357,7 +1626,7 @@ class TradingDashboard:
     def render_paper_trading(self):
         """Paper trading interface for live strategy testing"""
         st.subheader("📈 Paper Trading Simulation")
-        
+
         # Initialize paper trading state
         if 'paper_trading' not in st.session_state:
             st.session_state.paper_trading = {
@@ -1369,10 +1638,10 @@ class TradingDashboard:
                 'trades_history': [],
                 'daily_pnl': []
             }
-        
+
         # Paper trading controls
         col1, col2, col3 = st.columns([2, 1, 1])
-        
+
         with col1:
             if not st.session_state.paper_trading['active']:
                 # Setup paper trading
@@ -1400,9 +1669,9 @@ class TradingDashboard:
                 paper_data = st.session_state.paper_trading
                 
                 # Performance metrics
-                days_active = (datetime.now() - paper_data['start_date']).days
+                days_active = (datetime.now() - paper_data['start_date']).days if paper_data['start_date'] else 0
                 total_return = ((paper_data['current_capital'] - paper_data['initial_capital']) / 
-                              paper_data['initial_capital']) * 100
+                              paper_data['initial_capital']) * 100 if paper_data['initial_capital'] > 0 else 0
                 
                 metrics_col1, metrics_col2, metrics_col3, metrics_col4 = st.columns(4)
                 
@@ -1426,53 +1695,16 @@ class TradingDashboard:
                     amount = st.number_input("Amount (₹)", min_value=100, max_value=50000, value=5000)
                     
                     if st.form_submit_button("Execute Trade"):
-                        # Simulate trade execution
-                        current_price = np.random.uniform(100, 500)  # Simulated price
-                        
-                        trade = {
-                            'timestamp': datetime.now(),
-                            'symbol': symbol,
-                            'action': action,
-                            'amount': amount,
-                            'price': current_price,
-                            'quantity': amount / current_price
-                        }
-                        
-                        st.session_state.paper_trading['trades_history'].append(trade)
-                        
-                        if action == 'BUY':
-                            st.session_state.paper_trading['current_capital'] -= amount
-                            # Add to positions
-                            existing_pos = next((p for p in st.session_state.paper_trading['positions'] 
-                                               if p['symbol'] == symbol), None)
-                            
-                            if existing_pos:
-                                # Update existing position
-                                total_quantity = existing_pos['quantity'] + trade['quantity']
-                                total_value = existing_pos['value'] + amount
-                                existing_pos['avg_price'] = total_value / total_quantity
-                                existing_pos['quantity'] = total_quantity
-                                existing_pos['value'] = total_value
-                            else:
-                                # New position
-                                st.session_state.paper_trading['positions'].append({
-                                    'symbol': symbol,
-                                    'quantity': trade['quantity'],
-                                    'avg_price': current_price,
-                                    'value': amount,
-                                    'entry_date': datetime.now()
-                                })
-                        
-                        st.success(f"✅ {action} order executed for {symbol}")
-                        st.rerun()
-        
+                        # This section should be connected to a real data source for price
+                        st.warning("Trade execution is not fully implemented with real data.")
+
         with col3:
             if st.session_state.paper_trading['active']:
                 # Controls
                 st.markdown("### 🎛️ Controls")
                 
                 if st.button("📊 Generate Report"):
-                    st.info("Report generated! Check Results Analysis tab.")
+                    st.info("Report generation is under development.")
                 
                 if st.button("🔄 Reset Simulation"):
                     st.session_state.paper_trading = {
@@ -1496,46 +1728,25 @@ class TradingDashboard:
         if st.session_state.paper_trading['active'] and st.session_state.paper_trading['positions']:
             st.markdown("### 🎯 Current Positions")
             
-            positions_df = pd.DataFrame([
-                {
-                    'Symbol': pos['symbol'],
-                    'Quantity': f"{pos['quantity']:.2f}",
-                    'Avg Price': f"₹{pos['avg_price']:.2f}",
-                    'Investment': f"₹{pos['value']:,.2f}",
-                    'Entry Date': pos['entry_date'].strftime("%Y-%m-%d %H:%M"),
-                    'Current P&L': f"₹{np.random.uniform(-500, 1000):+,.2f}"  # Simulated P&L
-                }
-                for pos in st.session_state.paper_trading['positions']
-            ])
-            
-            st.dataframe(positions_df, use_container_width=True)
+            positions_df = pd.DataFrame(st.session_state.paper_trading['positions'])
+            st.dataframe(positions_df, width="stretch")
         
         # Recent trades
         if st.session_state.paper_trading['trades_history']:
             st.markdown("### 📋 Recent Trades")
             
             recent_trades = st.session_state.paper_trading['trades_history'][-10:]  # Last 10 trades
-            trades_df = pd.DataFrame([
-                {
-                    'Time': trade['timestamp'].strftime("%Y-%m-%d %H:%M:%S"),
-                    'Symbol': trade['symbol'],
-                    'Action': trade['action'],
-                    'Quantity': f"{trade['quantity']:.2f}",
-                    'Price': f"₹{trade['price']:.2f}",
-                    'Amount': f"₹{trade['amount']:,.2f}"
-                }
-                for trade in recent_trades
-            ])
-            
-            st.dataframe(trades_df, use_container_width=True)
+            trades_df = pd.DataFrame(recent_trades)
+            st.dataframe(trades_df, width="stretch")
     
     def render_backtest_results(self):
-        """Comprehensive backtest results analysis"""
-        st.subheader("📋 Results Analysis & Comparison")
+        """Render historical results and detailed analysis"""
+        st.subheader("🔬 Backtest Results Analysis")
         
-        # Results tabs
         results_tab1, results_tab2, results_tab3 = st.tabs([
-            "📊 Historical Results", "🔍 Performance Analysis", "📈 Strategy Comparison"
+            "📜 Results Summary", 
+            "🔍 Detailed Analysis", 
+            "⚖️ Strategy Comparison"
         ])
         
         with results_tab1:
@@ -1545,238 +1756,133 @@ class TradingDashboard:
             if 'quick_backtest_results' in st.session_state:
                 st.markdown("#### Most Recent Quick Test")
                 results_data = st.session_state.quick_backtest_results
+                params = results_data['parameters']
                 
                 col1, col2 = st.columns([1, 1])
                 
                 with col1:
                     st.json({
                         'Test Parameters': {
-                            'ETFs Tested': ', '.join(results_data['parameters']['etfs']),
-                            'Period': results_data['parameters']['period'],
-                            'Entry Threshold': f"{results_data['parameters']['entry_threshold']}%",
-                            'Profit Target': f"{results_data['parameters']['profit_target']}%",
-                            'Test Capital': f"₹{results_data['parameters']['test_capital']:,}"
+                            'ETFs Tested': ', '.join(params['etfs']),
+                            'Period': f"{params['start_date']} to {params['end_date']}",
+                            'Entry Threshold': f"{params['entry_threshold']}%",
+                            'Profit Target': f"{params['profit_target']}%",
+                            'Test Capital': f"₹{params['test_capital']:,}"
                         }
                     })
                 
                 with col2:
                     # Summary metrics
                     results = results_data['results']
-                    avg_win_rate = np.mean([r['win_rate'] for r in results.values()])
-                    avg_return = np.mean([r['total_return_pct'] for r in results.values()])
-                    best_etf = max(results.keys(), key=lambda k: results[k]['total_return_pct'])
-                    
-                    st.json({
-                        'Summary': {
-                            'Average Win Rate': f"{avg_win_rate:.1f}%",
-                            'Average Return': f"{avg_return:+.2f}%",
-                            'Best Performing ETF': best_etf,
-                            'Best ETF Return': f"{results[best_etf]['total_return_pct']:+.2f}%"
-                        }
-                    })
-            
-            # Historical results comparison
-            st.markdown("#### 📊 Results History")
-            
-            # Simulated historical results for demonstration
-            historical_data = {
-                'Test Date': ['2024-09-01', '2024-08-15', '2024-08-01', '2024-07-15'],
-                'Strategy': ['Turtle Trading', 'Mean Reversion', 'Turtle Trading', 'Momentum'],
-                'Period': ['6 Months', '3 Months', '1 Year', '6 Months'],
-                'Total Return': ['+12.5%', '+8.3%', '+24.1%', '+15.7%'],
-                'Win Rate': ['64.2%', '71.5%', '58.9%', '62.3%'],
-                'Max Drawdown': ['-8.7%', '-12.1%', '-15.3%', '-9.8%'],
-                'Sharpe Ratio': ['1.45', '1.82', '1.33', '1.67']
-            }
-            
-            historical_df = pd.DataFrame(historical_data)
-            st.dataframe(historical_df, use_container_width=True)
+                    if results:
+                        avg_win_rate = np.mean([r['win_rate'] for r in results.values()])
+                        avg_return = np.mean([r['total_return_pct'] for r in results.values()])
+                        best_etf = max(results.keys(), key=lambda k: results[k]['total_return_pct'])
+                        
+                        st.json({
+                            'Summary': {
+                                'Average Win Rate': f"{avg_win_rate:.1f}%",
+                                'Average Return': f"{avg_return:+.2f}%",
+                                'Best Performing ETF': best_etf,
+                                'Best ETF Return': f"{results[best_etf]['total_return_pct']:+.2f}%"
+                            }
+                        })
+                    else:
+                        st.json({'Summary': {'Message': 'No results to display'}})
+            else:
+                st.info("No backtest results found. Please run a quick backtest first.")
+
         
         with results_tab2:
             st.markdown("### 🔍 Detailed Performance Analysis")
             
-            # Performance metrics comparison
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Risk-Return Scatter Plot
-                strategies = ['Turtle Trading', 'Mean Reversion', 'Momentum', 'Buy & Hold']
-                returns = [12.5, 8.3, 15.7, 10.2]
-                risks = [16.8, 12.1, 19.3, 15.5]
-                
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=risks, y=returns,
-                    mode='markers+text',
-                    text=strategies,
-                    textposition='top center',
-                    marker=dict(size=12, color=['#2E86C1', '#E74C3C', '#F39C12', '#27AE60'])
-                ))
-                
-                fig.update_layout(
-                    title="Risk-Return Profile",
-                    xaxis_title="Risk (Volatility %)",
-                    yaxis_title="Return %",
-                    height=400
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                # Rolling Sharpe Ratio
-                dates = pd.date_range(start='2024-01-01', end='2024-09-01', freq='M')
-                sharpe_ratios = np.random.uniform(0.8, 2.2, len(dates))
-                
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=dates, y=sharpe_ratios,
-                    mode='lines+markers',
-                    name='Rolling Sharpe Ratio (3M)',
-                    line=dict(color='#3498DB', width=2)
-                ))
-                
-                fig.add_hline(y=1.0, line_dash="dash", line_color="red", 
-                             annotation_text="Acceptable Threshold")
-                
-                fig.update_layout(
-                    title="Rolling Sharpe Ratio Evolution",
-                    xaxis_title="Date",
-                    yaxis_title="Sharpe Ratio",
-                    height=400
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-            
             # Detailed metrics table
             st.markdown("#### 📊 Comprehensive Metrics")
-            
-            detailed_metrics = {
-                'Metric': [
-                    'Total Return', 'Annual Return', 'Volatility', 'Sharpe Ratio',
-                    'Max Drawdown', 'Calmar Ratio', 'Win Rate', 'Profit Factor',
-                    'Average Win', 'Average Loss', 'Recovery Time', 'VaR (95%)'
-                ],
-                'Turtle Strategy': [
-                    '+12.5%', '+25.0%', '16.8%', '1.49',
-                    '-8.7%', '2.87', '64.2%', '2.34',
-                    '+3.2%', '-1.4%', '32 days', '-2.1%'
-                ],
-                'Benchmark': [
-                    '+8.2%', '+16.4%', '18.3%', '0.89',
-                    '-12.3%', '1.33', 'N/A', 'N/A',
-                    'N/A', 'N/A', '67 days', '-2.8%'
-                ],
-                'Outperformance': [
-                    '+4.3%', '+8.6%', '-1.5%', '+0.60',
-                    '+3.6%', '+1.54', 'N/A', 'N/A',
-                    'N/A', 'N/A', '-35 days', '+0.7%'
-                ]
-            }
-            
-            detailed_df = pd.DataFrame(detailed_metrics)
-            st.dataframe(detailed_df, use_container_width=True)
+            if 'quick_backtest_results' in st.session_state:
+                results = st.session_state.quick_backtest_results['results']
+                if results:
+                    detailed_metrics_list = []
+                    for symbol, r in results.items():
+                        detailed_metrics_list.append({
+                            'ETF': symbol,
+                            'Total Return': f"{r.get('total_return_pct', 0):.2f}%",
+                            'Sharpe Ratio': f"{r.get('sharpe_ratio', 0):.2f}",
+                            'Max Drawdown': f"{r.get('max_drawdown', 0):.2f}%",
+                            'Win Rate': f"{r.get('win_rate', 0):.2f}%",
+                            'Profit Factor': f"{r.get('profit_factor', 0):.2f}",
+                        })
+                    detailed_df = pd.DataFrame(detailed_metrics_list)
+                    st.dataframe(detailed_df, width="stretch")
+                else:
+                    st.info("No detailed metrics to display. Run a backtest first.")
+            else:
+                st.info("Run a backtest to see detailed metrics.")
         
         with results_tab3:
             st.markdown("### 📈 Strategy Comparison")
+            st.info("This section is for comparing different saved strategy backtests. Feature under development.")
+
+    def render_live_ticker(self):
+        """Render live ticker data for top ETFs"""
+        st.subheader("📈 Live Market Ticker")
+        
+        try:
+            # Get top 10 liquid ETFs for ticker
+            ticker_symbols = self.liquid_etfs[:10] if len(self.liquid_etfs) >= 10 else self.liquid_etfs
             
-            # Strategy comparison interface
-            col1, col2 = st.columns([1, 2])
+            from data_manager import DataManager
+            data_manager = DataManager()
             
-            with col1:
-                st.markdown("#### Compare Strategies")
-                
-                selected_strategies = st.multiselect(
-                    "Select Strategies to Compare",
-                    options=['Turtle Trading', 'Mean Reversion', 'Momentum', 'Buy & Hold', 'RSI Strategy'],
-                    default=['Turtle Trading', 'Buy & Hold']
-                )
-                
-                comparison_metric = st.selectbox(
-                    "Primary Comparison Metric",
-                    options=['Total Return', 'Sharpe Ratio', 'Max Drawdown', 'Win Rate', 'Volatility']
-                )
-                
-                time_period = st.selectbox(
-                    "Comparison Period",
-                    options=['1 Month', '3 Months', '6 Months', '1 Year', '2 Years'],
-                    index=3
-                )
+            # Get live data for ticker
+            ticker_data = data_manager.get_all_ltps(ticker_symbols)
             
-            with col2:
-                if selected_strategies:
-                    st.markdown(f"#### {comparison_metric} Comparison")
-                    
-                    # Generate comparison data
-                    comparison_data = {}
-                    for strategy in selected_strategies:
-                        if comparison_metric == 'Total Return':
-                            value = np.random.uniform(5, 25)
-                        elif comparison_metric == 'Sharpe Ratio':
-                            value = np.random.uniform(0.5, 2.5)
-                        elif comparison_metric == 'Max Drawdown':
-                            value = -np.random.uniform(5, 20)
-                        elif comparison_metric == 'Win Rate':
-                            value = np.random.uniform(45, 75)
-                        else:  # Volatility
-                            value = np.random.uniform(10, 25)
+            if ticker_data:
+                # Create ticker display
+                ticker_cols = st.columns(5)
+                
+                for i, (symbol, price) in enumerate(ticker_data.items()):
+                    if i >= 10:  # Limit to 10 tickers
+                        break
                         
-                        comparison_data[strategy] = value
-                    
-                    # Create comparison chart
-                    fig = go.Figure()
-                    
-                    strategies = list(comparison_data.keys())
-                    values = list(comparison_data.values())
-                    
-                    colors = ['#2E86C1', '#E74C3C', '#F39C12', '#27AE60', '#8E44AD']
-                    
-                    fig.add_trace(go.Bar(
-                        x=strategies,
-                        y=values,
-                        marker_color=colors[:len(strategies)],
-                        text=[f"{v:.1f}{'%' if 'Rate' in comparison_metric or 'Return' in comparison_metric or 'Drawdown' in comparison_metric or 'Volatility' in comparison_metric else ''}" 
-                              for v in values],
-                        textposition='auto'
-                    ))
-                    
-                    fig.update_layout(
-                        title=f"{comparison_metric} Comparison ({time_period})",
-                        xaxis_title="Strategy",
-                        yaxis_title=comparison_metric,
-                        height=400
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-            
-            # Strategy rankings
-            st.markdown("#### 🏆 Strategy Rankings")
-            
-            ranking_data = {
-                'Rank': [1, 2, 3, 4, 5],
-                'Strategy': ['Turtle Trading', 'Mean Reversion', 'Momentum', 'RSI Strategy', 'Buy & Hold'],
-                'Score': [87.5, 82.3, 78.1, 71.9, 65.2],
-                'Total Return': ['+12.5%', '+8.3%', '+15.7%', '+6.8%', '+8.2%'],
-                'Sharpe Ratio': [1.49, 1.82, 1.33, 1.21, 0.89],
-                'Max DD': ['-8.7%', '-12.1%', '-9.8%', '-14.5%', '-12.3%']
-            }
-            
-            ranking_df = pd.DataFrame(ranking_data)
-            
-            # Color code by rank
-            def color_rank(val):
-                if val == 1:
-                    return 'background-color: #D5F4E6'  # Green
-                elif val == 2:
-                    return 'background-color: #FCF3CF'  # Yellow
-                elif val == 3:
-                    return 'background-color: #FADBD8'  # Light Red
-                else:
-                    return ''
-            
-            st.dataframe(
-                ranking_df.style.applymap(color_rank, subset=['Rank']),
-                use_container_width=True
-            )
+                    col_idx = i % 5
+                    with ticker_cols[col_idx]:
+                        if price > 0:
+                            # Get additional data for change calculation
+                            try:
+                                from kite_api_client import KiteAPIClient
+                                kite = KiteAPIClient()
+                                instrument_key = f"NSE:{symbol}"
+                                quote_data = kite.get_quote([instrument_key])
+                                
+                                if quote_data and instrument_key in quote_data:
+                                    quote = quote_data[instrument_key]
+                                    ohlc = quote.get('ohlc', {})
+                                    prev_close = float(ohlc.get('close', price))
+                                    change_pct = ((price - prev_close) / prev_close * 100) if prev_close > 0 else 0
+                                    
+                                    # Color coding
+                                    delta_color = "normal" if change_pct >= 0 else "inverse"
+                                    
+                                    st.metric(
+                                        label=symbol,
+                                        value=f"₹{price:.2f}",
+                                        delta=f"{change_pct:+.1f}%",
+                                        delta_color=delta_color
+                                    )
+                                else:
+                                    st.metric(label=symbol, value=f"₹{price:.2f}")
+                            except:
+                                st.metric(label=symbol, value=f"₹{price:.2f}")
+                        else:
+                            st.metric(label=symbol, value="N/A")
+                
+                # Auto-refresh notice
+                st.caption("🔄 Ticker updates with page refresh")
+            else:
+                st.info("📊 Live ticker data not available")
+                
+        except Exception as e:
+            st.error(f"❌ Ticker error: {e}")
     
     def render_etf_sector_overview(self):
         """Render ETF sector distribution"""
@@ -1792,7 +1898,7 @@ class TradingDashboard:
                 names=list(sector_counts.keys()),
                 title="ETF Distribution by Sector"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch", key="etf_sector_distribution")
         
         # Display sector-wise ETF list
         st.subheader("🏷️ ETFs by Sector")
@@ -1811,7 +1917,7 @@ class TradingDashboard:
                 
                 if etf_info:
                     df = pd.DataFrame(etf_info)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    st.dataframe(df, width="stretch", hide_index=True)
     
     def render_strategy_rules(self):
         """Render strategy rules and guidelines"""
@@ -1843,6 +1949,57 @@ class TradingDashboard:
         - Monthly: ~₹16,200 profit (1.62%)
         """)
     
+    def render_token_management(self):
+        """Render access token management interface"""
+        try:
+            # Use the access token manager to render the UI
+            access_token_manager.render_token_dashboard()
+            
+            # Additional dashboard-specific features
+            st.markdown("---")
+            st.subheader("🔗 API Connection Status")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("🧪 Test API Connection", key="test_api_connection"):
+                    with st.spinner("Testing API connection..."):
+                        is_connected, message = access_token_manager.test_connection()
+                    
+                    if is_connected:
+                        st.success(f"✅ {message}")
+                    else:
+                        st.error(f"❌ {message}")
+            
+            with col2:
+                if st.button("🔄 Restart Trading System", key="restart_system"):
+                    # Clear session state to restart
+                    keys_to_clear = ['capital_manager', 'trading_system', 'real_balance_manager']
+                    for key in keys_to_clear:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.success("🔄 System restart initiated. Refresh the page.")
+                    st.experimental_rerun()
+            
+            # Show current configuration
+            st.markdown("---")
+            st.subheader("⚙️ Current Configuration")
+            
+            config_info = {
+                "API Key": access_token_manager.api_key[:10] + "..." if access_token_manager.api_key else "Not set",
+                "Trading Mode": "ETF Only",
+                "Max Positions": "8",
+                "Position Size": "3%",
+                "Auto Refresh": st.session_state.get('auto_refresh', False)
+            }
+            
+            for key, value in config_info.items():
+                st.info(f"**{key}**: {value}")
+            
+        except Exception as e:
+            st.error(f"❌ Token management error: {e}")
+            st.info("💡 Make sure your API credentials are properly configured")
+    
     def run(self):
         """Run the main dashboard with navigation"""
         try:
@@ -1855,7 +2012,8 @@ class TradingDashboard:
                 "📋 Navigate to:",
                 options=[
                     "🏠 Main Dashboard", 
-                    "📊 Backtesting", 
+                    "� Access Token Manager",
+                    "�📊 Backtesting", 
                     "🎯 ETF Analysis", 
                     "⚙️ Settings"
                 ],
@@ -1881,6 +2039,10 @@ class TradingDashboard:
                 if st.session_state.auto_refresh:
                     time.sleep(30)
                     st.rerun()
+            
+            elif page == "🔐 Access Token Manager":
+                # Token management page
+                self.render_token_management()
                     
             elif page == "📊 Backtesting":
                 # Render the comprehensive backtesting page

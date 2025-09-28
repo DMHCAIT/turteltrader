@@ -51,25 +51,35 @@ class ETFOrderManager:
         logger.info(f"ETF Order Manager initialized with {len(self.etf_symbols)} ETF symbols")
     
     def _load_etf_symbols(self) -> List[str]:
-        """Load ETF symbols from configuration"""
+        """Load ETF symbols from configuration and ETF database"""
         symbols_str = config.get("TRADING", "SYMBOLS", "GOLDBEES,NIFTYBEES,BANKBEES")
-        return [symbol.strip() for symbol in symbols_str.split(",")]
+        symbols = [symbol.strip() for symbol in symbols_str.split(",")]
+        
+        # Also load from ETF database if available
+        try:
+            from etf_database import etf_db
+            db_symbols = etf_db.get_all_symbols()
+            # Merge and deduplicate
+            all_symbols = list(set(symbols + db_symbols))
+            logger.info(f"Loaded {len(all_symbols)} ETF symbols from config and database")
+            return all_symbols
+        except ImportError:
+            logger.warning("ETF database not available, using config symbols only")
+            return symbols
     
     def _get_etf_lot_sizes(self) -> Dict[str, int]:
-        """Get lot sizes for different ETFs"""
-        # Standard lot sizes for popular ETFs (can be updated from API)
-        return {
-            "GOLDBEES": 1,      # Gold ETF
-            "NIFTYBEES": 1,     # Nifty ETF
-            "BANKBEES": 1,      # Bank ETF
-            "JUNIORBEES": 1,    # Junior ETF
-            "LIQUIDBEES": 1,    # Liquid ETF
-            "ITBEES": 1,        # IT ETF
-            "PHARMBEES": 1,     # Pharma ETF
-            "PSUBANK": 1,       # PSU Bank ETF
-            "CPSE": 1,          # CPSE ETF
-            "NETF": 1           # Next 50 ETF
-        }
+        """Get lot sizes for different ETFs - Most Indian ETFs trade in lots of 1"""
+        lot_sizes = {}
+        
+        # Get all symbols and set default lot size of 1 for ETFs
+        for symbol in self.etf_symbols:
+            lot_sizes[symbol] = 1  # Most Indian ETFs have lot size of 1
+            
+        # Special cases can be added here if needed
+        # lot_sizes["SPECIAL_ETF"] = 10  # Example for special ETF with different lot size
+        
+        logger.info(f"Initialized lot sizes for {len(lot_sizes)} ETFs")
+        return lot_sizes
     
     def calculate_etf_position_size(self, symbol: str, price: float, 
                                   order_type: ETFOrderType) -> int:
@@ -350,7 +360,7 @@ class ETFOrderManager:
         return allocation
     
     def _get_available_capital(self) -> float:
-        """Get available capital from real ICICI account balance only"""
+        """Get available capital from real broker account balance only"""
         
         try:
             # Use RealAccountBalanceManager for accurate balance
@@ -367,11 +377,11 @@ class ETFOrderManager:
                 return balance.deployable_capital
             else:
                 logger.error("❌ Could not fetch real account balance")
-                raise ConnectionError("Failed to fetch real ICICI account balance - no static fallback allowed")
+                raise ConnectionError("Failed to fetch real broker account balance - no static fallback allowed")
             
         except Exception as e:
             logger.error(f"❌ Error getting real account capital: {e}")
-            raise ConnectionError("Must connect to real ICICI account - no static capital fallback allowed")
+            raise ConnectionError("Must connect to real broker account - no static capital fallback allowed")
 
 # Create global ETF order manager instance
 etf_order_manager = ETFOrderManager()

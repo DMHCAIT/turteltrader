@@ -264,11 +264,16 @@ class MarketDataValidator:
 # Global configuration instance
 config = Config()
 
+def get_config() -> Config:
+    """Get the global configuration instance"""
+    return config
+
 # Export main classes and functions
 __all__ = [
     'Config',
     'Constants', 
     'Utils',
     'MarketDataValidator',
-    'config'
+    'config',
+    'get_config'
 ]

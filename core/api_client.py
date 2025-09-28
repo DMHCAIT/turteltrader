@@ -1,15 +1,19 @@
-# Kite API Client Wrapper
+"""
+🔌 CORE API CLIENT WRAPPER
+==========================
+
+Clean wrapper for Kite API client - Real data only
+"""
 
 import sys
 import os
+
+# Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    from kite_api_client import get_kite_client, Position, Order
-    api_client = get_kite_client()
-except ImportError:
-    api_client = None
-    Position = None
-    Order = None
+from kite_api_client import get_kite_client, Position, Order, KiteAPIClient
 
-__all__ = ["api_client", "Position", "Order"]
+# Initialize the API client
+api_client = get_kite_client()
+
+__all__ = ["api_client", "get_kite_client", "Position", "Order", "KiteAPIClient"]
