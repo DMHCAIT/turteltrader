@@ -27,7 +27,6 @@ from kite_api_client import KiteAPIClient
 from core.api_client import get_kite_client
 from dynamic_capital_allocator import DynamicCapitalAllocator
 from real_time_monitor import RealTimeAccountMonitor, setup_default_monitoring
-from access_token_manager import access_token_manager
 from loguru import logger
 
 class TradingDashboard:
@@ -1949,56 +1948,88 @@ class TradingDashboard:
         - Monthly: ~₹16,200 profit (1.62%)
         """)
     
-    def render_token_management(self):
-        """Render access token management interface"""
+    def render_manual_config_info(self):
+        """Show manual configuration instructions"""
+        st.header("🔧 Manual Configuration Guide")
+        
+        st.markdown("""
+        ### 📋 Access Token Setup (Manual)
+        
+        **Step 1: Get your access token**
+        1. Visit: `https://kite.zerodha.com/connect/login?api_key=i0bd6xlyqau3ivqe&v=3`
+        2. Login with your Zerodha credentials
+        3. Authorize the app
+        4. Copy the `request_token` from the redirect URL
+        
+        **Step 2: Update config.ini**
+        Open your `config.ini` file and replace:
+        ```
+        access_token = YOUR_ACTUAL_TOKEN_FROM_STEP_1
+        ```
+        With your actual token.
+        
+        **Step 3: Restart the dashboard**
+        After updating the token, restart this dashboard.
+        
+        ---
+        
+        ### ⚙️ Current Configuration Status
+        """)
+        
+        # Show basic config status
         try:
-            # Use the access token manager to render the UI
-            access_token_manager.render_token_dashboard()
+            from kite_api_client import KiteAPIClient
+            client = KiteAPIClient()
             
-            # Additional dashboard-specific features
-            st.markdown("---")
-            st.subheader("🔗 API Connection Status")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("🧪 Test API Connection", key="test_api_connection"):
-                    with st.spinner("Testing API connection..."):
-                        is_connected, message = access_token_manager.test_connection()
-                    
-                    if is_connected:
-                        st.success(f"✅ {message}")
-                    else:
-                        st.error(f"❌ {message}")
-            
-            with col2:
-                if st.button("🔄 Restart Trading System", key="restart_system"):
-                    # Clear session state to restart
-                    keys_to_clear = ['capital_manager', 'trading_system', 'real_balance_manager']
-                    for key in keys_to_clear:
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    st.success("🔄 System restart initiated. Refresh the page.")
-                    st.experimental_rerun()
-            
-            # Show current configuration
-            st.markdown("---")
-            st.subheader("⚙️ Current Configuration")
-            
-            config_info = {
-                "API Key": access_token_manager.api_key[:10] + "..." if access_token_manager.api_key else "Not set",
-                "Trading Mode": "ETF Only",
-                "Max Positions": "8",
-                "Position Size": "3%",
-                "Auto Refresh": st.session_state.get('auto_refresh', False)
-            }
-            
-            for key, value in config_info.items():
-                st.info(f"**{key}**: {value}")
-            
+            if client.api_key and client.api_secret:
+                st.success("✅ API Key and Secret configured")
+            else:
+                st.error("❌ API Key or Secret missing")
+                
+            if hasattr(client, 'access_token') and client.access_token and client.access_token != "YOUR_ACTUAL_TOKEN_FROM_STEP_1":
+                st.success("✅ Access Token configured")
+                
+                # Test connection
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🧪 Test API Connection"):
+                        try:
+                            test_client = client.get_kite_client()
+                            if test_client:
+                                profile = test_client.profile()
+                                st.success(f"✅ Connected as: {profile.get('user_name', 'Unknown')}")
+                            else:
+                                st.error("❌ Connection failed")
+                        except Exception as e:
+                            st.error(f"❌ Connection error: {e}")
+                            
+                with col2:
+                    if st.button("🔄 Restart System"):
+                        # Clear session state
+                        keys_to_clear = ['capital_manager', 'trading_system', 'real_balance_manager']
+                        for key in keys_to_clear:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.success("🔄 System restart initiated. Refresh the page.")
+                        st.experimental_rerun()
+            else:
+                st.warning("⚠️ Access Token not configured or still using placeholder")
+                st.code("access_token = YOUR_ACTUAL_TOKEN_FROM_STEP_1")
+                
         except Exception as e:
-            st.error(f"❌ Token management error: {e}")
-            st.info("💡 Make sure your API credentials are properly configured")
+            st.error(f"❌ Configuration check failed: {e}")
+            
+        st.markdown("""
+        ---
+        
+        ### 📊 Trading Configuration
+        - **Trading Mode**: ETF Only
+        - **Max Positions**: 8
+        - **Position Size**: 3% per trade
+        - **Entry Threshold**: 1% dip
+        - **Profit Target**: 3%
+        - **Stop Loss**: 5%
+        """)
     
     def run(self):
         """Run the main dashboard with navigation"""
@@ -2040,11 +2071,7 @@ class TradingDashboard:
                     time.sleep(30)
                     st.rerun()
             
-            elif page == "🔐 Access Token Manager":
-                # Token management page
-                self.render_token_management()
-                    
-            elif page == "📊 Backtesting":
+            elif page == " Backtesting":
                 # Render the comprehensive backtesting page
                 self.render_backtesting_page()
                 
@@ -2081,8 +2108,40 @@ class TradingDashboard:
 
 def main():
     """Main function to run the dashboard"""
-    dashboard = TradingDashboard()
-    dashboard.run()
+    try:
+        dashboard = TradingDashboard()
+        dashboard.run()
+    except ConnectionError as e:
+        # Show credential error screen
+        st.error("🔐 **Kite API Credentials Required**")
+        st.markdown("""
+        ### System Configuration Required
+        
+        This trading system requires valid Kite Connect API credentials to function.
+        **No demo/fallback data is available.**
+        
+        #### Required Steps:
+        1. **Get Kite Connect API credentials** from https://kite.trade/
+        2. **Update your config.ini file** with:
+           - `api_key` 
+           - `api_secret`
+           - `access_token` (generate daily)
+        
+        #### Current Error:
+        ```
+        {e}
+        ```
+        
+        #### 📞 Need Help?
+        - Visit: https://kite.trade/docs/connect/v3/
+        - Contact: Zerodha support for API access
+        
+        **The system will only work with real market data and valid API credentials.**
+        """)
+        st.stop()
+    except Exception as e:
+        st.error(f"System initialization failed: {e}")
+        st.stop()
 
 if __name__ == "__main__":
     main()

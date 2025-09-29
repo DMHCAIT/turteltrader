@@ -213,7 +213,7 @@ class DynamicCapitalAllocator:
             logger.info(f"✅ Real balance loaded: ₹{self.total_capital:,.2f} free cash")
         else:
             logger.error("❌ Could not fetch real balance - NO FALLBACK ALLOWED")
-            raise ConnectionError("Real account balance required - fallback disabled per user request")
+            raise ConnectionError("Real account balance required - system will not work without valid API credentials")
 
     def _initialize_with_reference_capital(self, initial_capital: float):
         """Initialize using reference capital amount"""

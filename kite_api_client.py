@@ -37,19 +37,29 @@ class KiteAPIClient:
     def __init__(self, api_key: str = None, access_token: str = None):
         config = get_config()
         
-        self.api_key = api_key or config.get('KITE_API', 'api_key')
-        self.access_token = access_token or config.get('KITE_API', 'access_token')
+        self.api_key = api_key or config.get('KITE_API', 'api_key', fallback='')
+        self.access_token = access_token or config.get('KITE_API', 'access_token', fallback='')
         
-        if not self.api_key or not self.access_token:
+        if not self.api_key:
             raise ValueError("Kite API credentials required")
         
-        self.kite = KiteConnect(api_key=self.api_key)
-        self.kite.set_access_token(self.access_token)
+        self.kite = KiteConnect(api_key=self.api_key) if self.api_key else None
+        
+        # Only set access token if available
+        if self.access_token and self.kite:
+            self.kite.set_access_token(self.access_token)
+            logger.info("Kite API client initialized with access token")
+        else:
+            logger.warning("Kite API client initialized without access token - limited functionality")
         
         logger.info("Kite API client initialized")
     
     def test_connection(self) -> bool:
         try:
+            if not self.kite or not self.access_token:
+                logger.warning("Cannot test connection - no access token available")
+                return False
+                
             profile = self.kite.profile()
             if profile and 'user_id' in profile:
                 logger.info(f"Kite API connection successful - User: {profile['user_id']}")
@@ -61,6 +71,9 @@ class KiteAPIClient:
     
     def get_funds(self) -> Optional[Dict[str, Any]]:
         try:
+            if not self.kite or not self.access_token:
+                return None
+                
             margins = self.kite.margins()
             if margins and 'equity' in margins:
                 logger.info("Account margins fetched successfully")
@@ -69,6 +82,10 @@ class KiteAPIClient:
         except Exception as e:
             logger.error(f"Failed to get margins: {e}")
             return None
+    
+    def get_margins(self) -> Optional[Dict[str, Any]]:
+        """Alias for get_funds to maintain compatibility"""
+        return self.get_funds()
     
     def get_ltp(self, symbols: List[str]) -> Dict[str, float]:
         try:
@@ -139,15 +156,8 @@ def get_kite_client() -> KiteAPIClient:
         try:
             _kite_client = KiteAPIClient()
         except Exception as e:
-            logger.warning(f"Kite client not available: {e}")
-            # Return a mock client for dashboard to work without real API
-            from unittest.mock import Mock
-            mock_client = Mock()
-            mock_client.test_connection.return_value = False
-            mock_client.get_positions.return_value = []
-            mock_client.get_holdings.return_value = []
-            mock_client.get_profile.return_value = {"user_name": "Demo User"}
-            return mock_client
+            logger.error(f"Failed to initialize Kite client: {e}")
+            raise ConnectionError("Kite API credentials required - system will not work without valid credentials")
     
     return _kite_client
 

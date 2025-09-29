@@ -87,15 +87,12 @@ class DataManager:
             from kite_api_client import get_kite_client
             self.kite = get_kite_client()
             if hasattr(self.kite, 'test_connection') and not self.kite.test_connection():
-                logger.warning("Kite API connection test failed - using mock client")
+                raise ConnectionError("Kite API connection test failed - invalid credentials")
             else:
                 logger.info("✅ DataManager initialized with Kite API connection")
         except Exception as e:
-            logger.warning(f"DataManager running without Kite API: {e}")
-            # Create a mock client for demo mode
-            from unittest.mock import Mock
-            self.kite = Mock()
-            self.kite.test_connection.return_value = False
+            logger.error(f"DataManager failed to initialize: {e}")
+            raise ConnectionError("Kite API connection required - system will not work without valid credentials")
     
     def get_historical_data(self, symbol: str, days: int = 30, 
                           interval: str = Constants.DAY,

@@ -50,18 +50,13 @@ class TradingEngine:
         self.portfolio_manager = PortfolioManager()
         self.notification_manager = NotificationManager()
         
-        # Initialize API client (lazy-loaded, won't fail if credentials missing)
+        # Initialize API client (requires valid credentials)
         try:
             from kite_api_client import get_kite_client
             self.api_client = get_kite_client()
         except Exception as e:
-            logger.warning(f"API client not available: {e}")
-            # Create a mock API client for demo purposes
-            from unittest.mock import Mock
-            self.api_client = Mock()
-            self.api_client.test_connection.return_value = False
-            self.api_client.get_positions.return_value = []
-            self.api_client.get_holdings.return_value = []
+            logger.error(f"Failed to initialize API client: {e}")
+            raise ConnectionError("Kite API credentials required - system cannot start without valid credentials")
         
         # Trading parameters from config
         self.symbols_to_trade = self._load_trading_universe()

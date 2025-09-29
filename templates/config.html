@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - ETF Trading Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0e1117;
+            color: #fafafa;
+        }
+        .navbar-dark {
+            background-color: #262730 !important;
+        }
+        .card {
+            background-color: #262730;
+            border: 1px solid #3f3f46;
+        }
+        .card-header {
+            background-color: #374151;
+            border-bottom: 1px solid #3f3f46;
+        }
+        .btn-primary {
+            background-color: #00D4AA;
+            border-color: #00D4AA;
+        }
+        .btn-primary:hover {
+            background-color: #00B89A;
+            border-color: #00B89A;
+        }
+        .btn-success {
+            background-color: #22c55e;
+            border-color: #22c55e;
+        }
+        .form-control {
+            background-color: #374151;
+            border-color: #3f3f46;
+            color: #fafafa;
+        }
+        .form-control:focus {
+            background-color: #374151;
+            border-color: #00D4AA;
+            color: #fafafa;
+            box-shadow: 0 0 0 0.2rem rgba(0, 212, 170, 0.25);
+        }
+        .status-connected {
+            color: #00D4AA;
+        }
+        .status-disconnected {
+            color: #ef4444;
+        }
+        .alert-info {
+            background-color: #1e3a8a;
+            border-color: #3b82f6;
+            color: #dbeafe;
+        }
+        .alert-success {
+            background-color: #166534;
+            border-color: #22c55e;
+            color: #dcfce7;
+        }
+        .alert-warning {
+            background-color: #a16207;
+            border-color: #eab308;
+            color: #fef3c7;
+        }
+        .alert-danger {
+            background-color: #dc2626;
+            border-color: #ef4444;
+            color: #fecaca;
+        }
+        .code-block {
+            background-color: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark navbar-expand-lg">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line me-2"></i>ETF Trading Dashboard
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">
+                    <i class="fas fa-home me-1"></i>Dashboard
+                </a>
+                <a class="nav-link active" href="/config">
+                    <i class="fas fa-cog me-1"></i>Configuration
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-key me-2"></i>Access Token Configuration
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle me-2"></i>How to Generate Access Token</h6>
+                            <ol class="mb-0">
+                                <li>Click the "Open Authorization URL" button below</li>
+                                <li>Login with your Zerodha credentials</li>
+                                <li>Authorize the application</li>
+                                <li>Copy the <code>request_token</code> from the redirect URL</li>
+                                <li>Paste it in the form below and click "Update Token"</li>
+                            </ol>
+                        </div>
+
+                        <div class="mb-4">
+                            <button type="button" class="btn btn-primary btn-lg" onclick="openAuthURL()">
+                                <i class="fas fa-external-link-alt me-2"></i>Open Authorization URL
+                            </button>
+                            <small class="form-text text-muted d-block mt-2">
+                                This will open Kite Connect authorization page in a new tab
+                            </small>
+                        </div>
+
+                        <form id="token-form">
+                            <div class="mb-3">
+                                <label for="access_token" class="form-label">Access Token / Request Token</label>
+                                <input type="text" class="form-control" id="access_token" 
+                                       placeholder="Paste your request_token here..." required>
+                                <div class="form-text">
+                                    Paste the request_token value from the redirect URL after authorization
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-2"></i>Update Token
+                            </button>
+                        </form>
+
+                        <div id="update-result" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-info-circle me-2"></i>Current Status
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <strong>API Connection:</strong>
+                            <div id="api-status" class="mt-1">
+                                <i class="fas fa-spinner fa-spin me-2"></i>Checking...
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <strong>Configuration:</strong>
+                            <div id="config-status" class="mt-1">
+                                <i class="fas fa-spinner fa-spin me-2"></i>Loading...
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn btn-primary btn-sm" onclick="testConnection()">
+                            <i class="fas fa-plug me-2"></i>Test Connection
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-book me-2"></i>Quick Reference
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <h6>Authorization URL:</h6>
+                        <div class="code-block" style="font-size: 0.7rem; word-break: break-all;">
+                            https://kite.zerodha.com/connect/login?api_key=i0bd6xlyqau3ivqe&v=3
+                        </div>
+
+                        <h6 class="mt-3">Redirect URL Format:</h6>
+                        <div class="code-block" style="font-size: 0.7rem;">
+                            http://127.0.0.1:8080/?request_token=<span style="color: #00D4AA;">YOUR_TOKEN</span>&action=login&status=success
+                        </div>
+
+                        <div class="alert alert-warning mt-3">
+                            <small>
+                                <strong>Note:</strong> Access tokens expire daily at 6 AM and need to be regenerated.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function openAuthURL() {
+            const authURL = 'https://kite.zerodha.com/connect/login?api_key=i0bd6xlyqau3ivqe&v=3';
+            window.open(authURL, '_blank');
+        }
+
+        async function loadStatus() {
+            try {
+                // Load API status
+                const statusResponse = await fetch('/api/status');
+                const statusData = await statusResponse.json();
+                
+                const apiStatusElement = document.getElementById('api-status');
+                if (statusData.connected) {
+                    apiStatusElement.innerHTML = '<i class="fas fa-circle status-connected me-2"></i>Connected: ' + statusData.user;
+                } else {
+                    apiStatusElement.innerHTML = '<i class="fas fa-circle status-disconnected me-2"></i>Disconnected';
+                }
+
+                // Load config status
+                const configResponse = await fetch('/api/config');
+                const configData = await configResponse.json();
+                
+                const configStatusElement = document.getElementById('config-status');
+                if (configData.success) {
+                    configStatusElement.innerHTML = `
+                        <small>
+                            API Key: ${configData.data.api_key}<br>
+                            API Secret: ${configData.data.api_secret}<br>
+                            Access Token: ${configData.data.access_token}
+                        </small>
+                    `;
+                } else {
+                    configStatusElement.innerHTML = '<span class="text-danger">Config load error</span>';
+                }
+
+            } catch (error) {
+                console.error('Error loading status:', error);
+            }
+        }
+
+        async function testConnection() {
+            const button = event.target;
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Testing...';
+            button.disabled = true;
+
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                if (data.connected) {
+                    document.getElementById('update-result').innerHTML = 
+                        '<div class="alert alert-success">✅ Connection successful! User: ' + data.user + '</div>';
+                } else {
+                    document.getElementById('update-result').innerHTML = 
+                        '<div class="alert alert-danger">❌ Connection failed: ' + data.message + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('update-result').innerHTML = 
+                    '<div class="alert alert-danger">❌ Test failed: ' + error.message + '</div>';
+            } finally {
+                button.innerHTML = originalHTML;
+                button.disabled = false;
+                loadStatus(); // Refresh status
+            }
+        }
+
+        document.getElementById('token-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const button = this.querySelector('button[type="submit"]');
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Updating...';
+            button.disabled = true;
+
+            const accessToken = document.getElementById('access_token').value.trim();
+
+            try {
+                const response = await fetch('/api/update-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        access_token: accessToken
+                    })
+                });
+
+                const data = await response.json();
+                const resultElement = document.getElementById('update-result');
+
+                if (data.success) {
+                    resultElement.innerHTML = '<div class="alert alert-success">✅ ' + data.message + '</div>';
+                    document.getElementById('access_token').value = '';
+                    loadStatus(); // Refresh status
+                } else {
+                    resultElement.innerHTML = '<div class="alert alert-danger">❌ ' + data.error + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('update-result').innerHTML = 
+                    '<div class="alert alert-danger">❌ Update failed: ' + error.message + '</div>';
+            } finally {
+                button.innerHTML = originalHTML;
+                button.disabled = false;
+            }
+        });
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStatus();
+        });
+    </script>
+</body>
+</html>
